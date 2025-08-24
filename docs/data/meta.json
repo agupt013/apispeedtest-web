@@ -1,5 +1,5 @@
 {
-  "generated_at": "2025-08-24T06:04:24.354293+00:00",
+  "generated_at": "2025-08-24T09:01:59.311959+00:00",
   "runs": 3,
   "mode": "both",
   "models": [
@@ -22,6 +22,6 @@
     "gemini:gemini-1.5-pro",
     "llama:llama3-70b-8192"
   ],
-  "request_timeout_seconds": null,
-  "error_message": "Benchmark failures encountered. Last error: GroqError: The api_key client option must be set either by passing api_key to the client or by setting the GROQ_API_KEY environment variable"
+  "request_timeout_seconds": 60.0,
+  "error_message": "Benchmark failures encountered. Last error: AuthenticationError: Error code: 401 - {'error': {'message': \"You didn't provide an API key. You need to provide your API key in an Authorization header using Bearer auth (i.e. Authorization: Bearer YOUR_KEY), or as the password field (with blank username) if you're accessing the API from your browser and are prompted for a username and password. You can obtain an API key from https://platform.openai.com/account/api-keys.\", 'type': 'invalid_request_error', 'param': None, 'code': None}}"
 }
