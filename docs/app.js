@@ -242,6 +242,33 @@ async function init() {
       refreshTimesOnly();
       console.log(`[app] timezone set to ${tzSel.value}`);
     });
+
+    // Homepage link init
+    const homepageUrl = (window.APISPEEDTEST_CONFIG.HOMEPAGE_URL || '').trim();
+    const homeLink = document.getElementById('homepage-link');
+    if (homepageUrl) {
+      homeLink.href = homepageUrl;
+      // Use _blank for external sites by default; keep _self if same origin
+      try {
+        const homeUrlObj = new URL(homepageUrl, window.location.href);
+        homeLink.target = (homeUrlObj.origin === window.location.origin) ? '_self' : '_blank';
+      } catch {}
+      homeLink.hidden = false;
+    }
+
+    // Visitor counter (localStorage-based, per browser) as a simple indicator
+    if (window.APISPEEDTEST_CONFIG.ENABLE_VISITOR_COUNTER) {
+      const counterEl = document.getElementById('visitor-count-value');
+      const storageKey = 'apispeedtest-visit-count';
+      let count = 0;
+      try {
+        count = Number(localStorage.getItem(storageKey) || '0');
+        if (!Number.isFinite(count) || count < 0) count = 0;
+      } catch {}
+      count += 1;
+      try { localStorage.setItem(storageKey, String(count)); } catch {}
+      if (counterEl) counterEl.textContent = String(count);
+    }
   } catch (err) {
     console.error('[app] error:', err);
     document.getElementById('updated-time').textContent = 'Error loading data';
@@ -249,4 +276,33 @@ async function init() {
   }
 }
 
-window.addEventListener('DOMContentLoaded', init);
+// Initialize links/counter as soon as DOM is ready, independent of data fetch
+window.addEventListener('DOMContentLoaded', () => {
+  try {
+    const homepageUrl = (window.APISPEEDTEST_CONFIG && window.APISPEEDTEST_CONFIG.HOMEPAGE_URL) ? String(window.APISPEEDTEST_CONFIG.HOMEPAGE_URL).trim() : '';
+    const homeLink = document.getElementById('homepage-link');
+    if (homeLink && homepageUrl) {
+      homeLink.href = homepageUrl;
+      try {
+        const homeUrlObj = new URL(homepageUrl, window.location.href);
+        homeLink.target = (homeUrlObj.origin === window.location.origin) ? '_self' : '_blank';
+      } catch {}
+      homeLink.hidden = false;
+    }
+
+    if (window.APISPEEDTEST_CONFIG && window.APISPEEDTEST_CONFIG.ENABLE_VISITOR_COUNTER) {
+      const counterEl = document.getElementById('visitor-count-value');
+      const storageKey = 'apispeedtest-visit-count';
+      let count = 0;
+      try {
+        count = Number(localStorage.getItem(storageKey) || '0');
+        if (!Number.isFinite(count) || count < 0) count = 0;
+      } catch {}
+      count += 1;
+      try { localStorage.setItem(storageKey, String(count)); } catch {}
+      if (counterEl) counterEl.textContent = String(count);
+    }
+  } catch {}
+
+  init();
+});
