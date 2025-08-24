@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>API Speed Test Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="config.js"></script>
+</head>
+<body>
+  <header>
+    <h1>API Speed Test</h1>
+    <div class="controls">
+      <label>
+        Time display:
+        <select id="time-mode">
+          <option value="relative">Relative</option>
+          <option value="absolute">Absolute</option>
+        </select>
+      </label>
+      <label>
+        Timezone:
+        <select id="timezone">
+          <option value="local">Local</option>
+          <option value="UTC">UTC</option>
+        </select>
+      </label>
+    </div>
+    <div class="filters">
+      <input id="search" type="text" placeholder="Filter by key/model..." />
+      <select id="provider-filter">
+        <option value="">All providers</option>
+        <option value="openai">OpenAI</option>
+        <option value="azure">Azure</option>
+        <option value="anthropic">Anthropic</option>
+        <option value="gemini">Gemini</option>
+        <option value="llama">Llama (Groq)</option>
+      </select>
+      <button id="clear-filters" type="button">Clear</button>
+    </div>
+    <div class="updated">
+      Updated: <span id="updated-time">Loading...</span>
+    </div>
+    <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+  </header>
+
+  <main>
+    <table id="results-table">
+      <thead>
+        <tr>
+          <th data-key="key"><span class="th-label">Model Key</span><span class="sort-icons" aria-hidden="true">
+            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+          </span></th>
+          <th data-key="provider"><span class="th-label">Provider</span><span class="sort-icons" aria-hidden="true">
+            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+          </span></th>
+          <th data-key="model"><span class="th-label">Model</span><span class="sort-icons" aria-hidden="true">
+            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+          </span></th>
+          <th class="num" data-key="nonstreaming_avg_s"><span class="th-label">NS avg (s)</span><span class="sort-icons" aria-hidden="true">
+            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+          </span></th>
+          <th class="num" data-key="nonstream_tokens_per_second"><span class="th-label">NS TPS</span><span class="sort-icons" aria-hidden="true">
+            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+          </span></th>
+          <th class="num" data-key="streaming_ttfb_avg_s"><span class="th-label">TTFB (s)</span><span class="sort-icons" aria-hidden="true">
+            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+          </span></th>
+          <th class="num" data-key="streaming_total_avg_s"><span class="th-label">Stream (s)</span><span class="sort-icons" aria-hidden="true">
+            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+          </span></th>
+          <th class="num" data-key="stream_tokens_per_second"><span class="th-label">ST TPS</span><span class="sort-icons" aria-hidden="true">
+            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+          </span></th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+
+    <section id="definitions">
+      <h2>Definitions</h2>
+      <ul>
+        <li><strong>NS avg (s)</strong>: Average end-to-end time for a non-streaming request.</li>
+        <li><strong>NS TPS</strong>: Non-streaming throughput in tokens/sec (completion tokens divided by non-streaming duration, aggregated over runs).</li>
+        <li><strong>TTFB (s)</strong>: Time-to-first-token during streaming; measured from stream start until first chunk arrives.</li>
+        <li><strong>Stream (s)</strong>: Total streaming time from start to last chunk.</li>
+        <li><strong>ST TPS</strong>: Streaming throughput in tokens/sec (completion tokens divided by total streaming time; estimated from characters if usage is unavailable).</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <small>
+      Data auto-updates hourly. Configure display in config.js or via URL params.
+    </small>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+body {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  margin: 0;
+  color: #111;
+  background: #fafafa;
+}
+header {
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 16px 20px;
+}
+header h1 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+}
+.controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 6px 0 4px 0;
+}
+.filters { display: flex; gap: 10px; margin: 8px 0; }
+.filters input[type="text"] { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; min-width: 240px; }
+.filters select { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; }
+.filters button { padding: 6px 10px; border: 1px solid #d1d5db; background: #f9fafb; border-radius: 6px; cursor: pointer; }
+.filters button:hover { background: #f3f4f6; }
+
+.updated { color: #555; font-size: 12px; }
+main { padding: 16px 20px; }
+
+table { width: 100%; border-collapse: collapse; background: #fff; }
+th, td { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }
+th { text-align: left; background: #f3f4f6; font-weight: 600; font-size: 13px; user-select: none; }
+th[data-key] { cursor: pointer; }
+
+/* Sort icon cluster */
+th .sort-icons { display: inline-flex; align-items: center; margin-left: 6px; position: relative; top: 2px; }
+.icon { width: 12px; height: 12px; color: #9aa0a6; }
+.icon-asc, .icon-desc { display: none; }
+
+/* Neutral state */
+th .icon-sort { display: inline-block; opacity: 0.45; }
+/* Active states toggle in JS via classes */
+th.sort-asc .icon-sort, th.sort-desc .icon-sort { display: none; }
+th.sort-asc .icon-asc { display: inline-block; color: #111; }
+th.sort-desc .icon-desc { display: inline-block; color: #111; }
+
+td { font-size: 13px; }
+.num { text-align: right; }
+
+tbody tr:hover { background: #f9fafb; }
+
+#definitions { margin-top: 20px; background: #fff; border: 1px solid #e5e7eb; padding: 12px 14px; border-radius: 6px; }
+#definitions h2 { font-size: 16px; margin: 0 0 8px 0; }
+#definitions ul { margin: 0; padding-left: 18px; }
+#definitions li { margin: 6px 0; }
+footer { padding: 12px 20px; color: #666; font-size: 12px; }
+
+.notice { margin-top: 8px; padding: 10px 12px; border-radius: 6px; font-size: 13px; }
+.notice.error { background: #FEF2F2; color: #991B1B; border: 1px solid #FCA5A5; }
+.notice.info { background: #EFF6FF; color: #1E40AF; border: 1px solid #93C5FD; }
