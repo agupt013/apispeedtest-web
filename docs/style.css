@@ -13,6 +13,11 @@ header h1 {
   margin: 0 0 8px 0;
   font-size: 20px;
 }
+.meta-bar { display: flex; gap: 12px; align-items: center; margin-top: 8px; font-size: 12px; color: #374151; }
+.meta-bar a { color: #1f2937; text-decoration: none; border: 1px solid #e5e7eb; background: #f9fafb; padding: 4px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; }
+.meta-bar a:hover { background: #f3f4f6; }
+.meta-bar #visitor-counter { margin-left: auto; color: #4b5563; }
+.meta-bar .icon-home { width: 14px; height: 14px; color: #374151; }
 .controls {
   display: flex;
   gap: 12px;
