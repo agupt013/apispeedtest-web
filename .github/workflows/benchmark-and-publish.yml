@@ -2,7 +2,7 @@ name: Benchmark and Publish
 
 on:
   schedule:
-    - cron: '0 * * * *' # hourly
+    - cron: '0 */4 * * *' # every 4 hours
   workflow_dispatch: {}
 
 permissions:
@@ -13,7 +13,7 @@ permissions:
 env:
   PYTHON_VERSION: '3.11'
   # Point to your APISpeedTest repo. You can use a public repo path or a URL.
-  APISPEEDTEST_REPO: 'agupt013/APISpeedTest'
+  APISPEEDTEST_REPO: 'YOUR_ORG/APISpeedTest'
   # Runner configuration
   MODELS: 'all'
   RUNS: '3'
