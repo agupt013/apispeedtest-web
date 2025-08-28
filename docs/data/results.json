@@ -3,52 +3,52 @@
     "key": "anthropic:claude-3-7-sonnet-latest",
     "provider": "anthropic",
     "model": "claude-3-7-sonnet-latest",
-    "nonstreaming_avg_s": 4.390978373000006,
+    "nonstreaming_avg_s": 3.128227970333332,
     "nonstreaming_runs": [
       {
-        "duration_seconds": 6.158510758000006,
+        "duration_seconds": 2.9426350079999963,
         "prompt_tokens": 32,
         "completion_tokens": 111,
         "total_tokens": 143
       },
       {
-        "duration_seconds": 3.591115776999999,
+        "duration_seconds": 2.9580749170000047,
         "prompt_tokens": 32,
         "completion_tokens": 111,
         "total_tokens": 143
       },
       {
-        "duration_seconds": 3.4233085840000115,
+        "duration_seconds": 3.483973985999995,
         "prompt_tokens": 32,
-        "completion_tokens": 111,
-        "total_tokens": 143
+        "completion_tokens": 108,
+        "total_tokens": 140
       }
     ],
-    "streaming_ttfb_avg_s": 2.2112533099999987,
-    "streaming_total_avg_s": 4.173725156333333,
+    "streaming_ttfb_avg_s": 2.45689502433333,
+    "streaming_total_avg_s": 4.4503978,
     "streaming_runs": [
       {
-        "time_to_first_token_seconds": 1.7410903050000002,
-        "total_time_seconds": 3.7691240529999988,
-        "num_chunks": 13,
+        "time_to_first_token_seconds": 1.6614203329999953,
+        "total_time_seconds": 3.6206251710000004,
+        "num_chunks": 15,
         "characters_streamed": 420,
         "prompt_tokens": 32,
         "completion_tokens": 111,
         "total_tokens": 143
       },
       {
-        "time_to_first_token_seconds": 2.502236635999992,
-        "total_time_seconds": 4.4278961969999955,
+        "time_to_first_token_seconds": 2.3812033410000026,
+        "total_time_seconds": 4.447599226999998,
         "num_chunks": 14,
-        "characters_streamed": 399,
+        "characters_streamed": 420,
         "prompt_tokens": 32,
-        "completion_tokens": 108,
-        "total_tokens": 140
+        "completion_tokens": 111,
+        "total_tokens": 143
       },
       {
-        "time_to_first_token_seconds": 2.3904329890000042,
-        "total_time_seconds": 4.324155219000005,
-        "num_chunks": 13,
+        "time_to_first_token_seconds": 3.328061398999992,
+        "total_time_seconds": 5.2829690020000015,
+        "num_chunks": 14,
         "characters_streamed": 399,
         "prompt_tokens": 32,
         "completion_tokens": 108,
@@ -58,8 +58,8 @@
     "total_prompt_tokens": 192,
     "total_completion_tokens": 660,
     "total_tokens": 852,
-    "nonstream_tokens_per_second": 25.27910423848491,
-    "stream_tokens_per_second": 26.11575892451859,
-    "updated_at": "2025-08-28T11:13:07.031395+00:00"
+    "nonstream_tokens_per_second": 35.16367766134346,
+    "stream_tokens_per_second": 24.716891600117187,
+    "updated_at": "2025-08-28T12:29:51.142147+00:00"
   }
 ]
