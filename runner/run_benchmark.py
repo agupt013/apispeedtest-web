@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import logging
 
 # Expect apispeedtest to be installed (pip install -e ../APISpeedTest) in CI or locally
@@ -17,6 +17,7 @@ from apispeedtest.latency_tester import summarize_model, ModelLatencySummary
 
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "docs" / "data"
 LOGGER = logging.getLogger("apispeedtest-web")
+HISTORY_RETENTION_DAYS = 365  # Keep history for 1 year
 
 
 def _env(name: str, fallback: str | None = None) -> str | None:
@@ -83,6 +84,58 @@ def _result_to_dict(r: ModelLatencySummary) -> Dict[str, Any]:
 	}
 
 
+def extract_metrics_for_history(result: Dict[str, Any]) -> Dict[str, Any]:
+	"""Extract the key metrics from a result to store in history"""
+	timestamp = result.get("updated_at")
+	if not timestamp:
+		timestamp = datetime.now(timezone.utc).isoformat()
+		
+	return {
+		"timestamp": timestamp,
+		"key": result["key"],
+		"provider": result["provider"],
+		"model": result["model"],
+		"nonstreaming_avg_s": result["nonstreaming_avg_s"],
+		"streaming_ttfb_avg_s": result["streaming_ttfb_avg_s"],
+		"streaming_total_avg_s": result["streaming_total_avg_s"],
+		"nonstream_tokens_per_second": result["nonstream_tokens_per_second"],
+		"stream_tokens_per_second": result["stream_tokens_per_second"],
+	}
+
+
+def update_history(results: List[Dict[str, Any]]) -> None:
+	"""Update the history.json file with the latest results"""
+	history_file = OUTPUT_DIR / "history.json"
+	
+	# Load existing history or create empty list
+	if history_file.exists():
+		try:
+			history = json.loads(history_file.read_text())
+			if not isinstance(history, list):
+				LOGGER.warning("History file exists but is not a list, resetting")
+				history = []
+		except Exception as e:
+			LOGGER.warning(f"Failed to parse history file: {e}, resetting")
+			history = []
+	else:
+		history = []
+		
+	# Add new entries
+	current_time = datetime.now(timezone.utc)
+	cutoff_date = current_time - timedelta(days=HISTORY_RETENTION_DAYS)
+	
+	# Filter out old entries
+	history = [entry for entry in history if datetime.fromisoformat(entry["timestamp"]) >= cutoff_date]
+	
+	# Add new entries
+	for result in results:
+		history.append(extract_metrics_for_history(result))
+		
+	# Write back to file
+	history_file.write_text(json.dumps(history, indent=2))
+	LOGGER.info(f"Updated history.json with {len(results)} new entries, total entries: {len(history)}")
+
+
 def run() -> None:
 	# Configure logging if not already set by the environment/runner
 	if not logging.getLogger().handlers:
@@ -145,6 +198,10 @@ def run() -> None:
 		json_results.append(obj)
 	(OUTPUT_DIR / "results.json").write_text(json.dumps(json_results, indent=2))
 	LOGGER.info("Wrote results.json with %d summaries", len(json_results))
+	
+	# Update history with the latest results
+	update_history(json_results)
+	LOGGER.info("Updated history data")
 
 
 if __name__ == "__main__":

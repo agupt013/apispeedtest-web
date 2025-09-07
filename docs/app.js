@@ -1,10 +1,16 @@
 let APP_STATE = {
   results: [],
   meta: null,
+  history: [],
   sortKey: null,
   sortDir: 'asc', // 'asc' | 'desc'
   searchQuery: '',
-  provider: ''
+  provider: '',
+  viewMode: 'table', // 'table' | 'history'
+  selectedModel: 'all',
+  timeFrame: 30, // days
+  selectedMetric: 'nonstreaming_avg_s',
+  historyChart: null
 };
 
 function showNotice(msg, kind) {
@@ -194,15 +200,234 @@ function renderTable(results) {
   }
 }
 
+function toggleView() {
+  const tableView = document.getElementById('table-view');
+  const historyView = document.getElementById('history-view');
+  const historyControls = document.getElementById('history-controls');
+  const filters = document.querySelector('.filters');
+  
+  if (APP_STATE.viewMode === 'table') {
+    tableView.style.display = 'block';
+    historyView.style.display = 'none';
+    historyControls.style.display = 'none';
+    filters.style.display = 'flex';
+  } else {
+    tableView.style.display = 'none';
+    historyView.style.display = 'block';
+    historyControls.style.display = 'flex';
+    filters.style.display = 'none';
+    renderHistoryChart();
+  }
+}
+
+function populateModelSelector() {
+  const selector = document.getElementById('model-selector');
+  
+  // Clear existing options except the first one
+  while (selector.options.length > 1) {
+    selector.remove(1);
+  }
+  
+  // Add models from results
+  const models = new Set();
+  APP_STATE.results.forEach(result => {
+    models.add(result.key);
+  });
+  
+  // Sort models alphabetically
+  const sortedModels = Array.from(models).sort();
+  
+  // Add options to selector
+  sortedModels.forEach(model => {
+    const option = document.createElement('option');
+    option.value = model;
+    option.textContent = model;
+    selector.appendChild(option);
+  });
+}
+
+function getHistoryData() {
+  // Filter history data based on selected model and time frame
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - (APP_STATE.timeFrame * 24 * 60 * 60 * 1000));
+  
+  let filteredData = APP_STATE.history.filter(entry => {
+    const entryDate = new Date(entry.timestamp);
+    return entryDate >= cutoff;
+  });
+  
+  if (APP_STATE.selectedModel !== 'all') {
+    filteredData = filteredData.filter(entry => entry.key === APP_STATE.selectedModel);
+  }
+  
+  return filteredData;
+}
+
+function renderHistoryChart() {
+  const ctx = document.getElementById('history-chart').getContext('2d');
+  
+  // Get filtered data
+  const data = getHistoryData();
+  
+  // Group data by model
+  const modelData = {};
+  data.forEach(entry => {
+    if (!modelData[entry.key]) {
+      modelData[entry.key] = [];
+    }
+    modelData[entry.key].push({
+      x: new Date(entry.timestamp),
+      y: entry[APP_STATE.selectedMetric]
+    });
+  });
+  
+  // Sort data points by date for each model
+  Object.keys(modelData).forEach(model => {
+    modelData[model].sort((a, b) => a.x - b.x);
+  });
+  
+  // Generate random colors for each model
+  const colors = {};
+  Object.keys(modelData).forEach((model, index) => {
+    // Generate colors based on provider
+    const provider = data.find(entry => entry.key === model)?.provider || '';
+    
+    // Assign color based on provider
+    switch(provider) {
+      case 'openai':
+        colors[model] = `hsl(120, 70%, ${40 + (index % 5) * 10}%)`;
+        break;
+      case 'azure':
+        colors[model] = `hsl(210, 70%, ${40 + (index % 5) * 10}%)`;
+        break;
+      case 'anthropic':
+        colors[model] = `hsl(280, 70%, ${40 + (index % 5) * 10}%)`;
+        break;
+      case 'gemini':
+        colors[model] = `hsl(30, 70%, ${40 + (index % 5) * 10}%)`;
+        break;
+      default:
+        colors[model] = `hsl(${(index * 60) % 360}, 70%, 50%)`;
+    }
+  });
+  
+  // Create datasets for Chart.js
+  const datasets = Object.keys(modelData).map(model => ({
+    label: model,
+    data: modelData[model],
+    borderColor: colors[model],
+    backgroundColor: colors[model] + '33', // Add transparency
+    tension: 0.2,
+    pointRadius: 3
+  }));
+  
+  // Get metric label for chart title
+  const metricLabels = {
+    'nonstreaming_avg_s': 'Non-streaming Average (seconds)',
+    'streaming_ttfb_avg_s': 'Time to First Byte (seconds)',
+    'streaming_total_avg_s': 'Streaming Total (seconds)',
+    'nonstream_tokens_per_second': 'Non-streaming Tokens per Second',
+    'stream_tokens_per_second': 'Streaming Tokens per Second'
+  };
+  
+  // Destroy previous chart if it exists
+  if (APP_STATE.historyChart) {
+    APP_STATE.historyChart.destroy();
+  }
+  
+  // Create new chart
+  APP_STATE.historyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: {
+          display: true,
+          text: metricLabels[APP_STATE.selectedMetric] || APP_STATE.selectedMetric,
+          font: {
+            size: 16
+          }
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false
+        },
+        legend: {
+          position: 'bottom',
+          labels: {
+            boxWidth: 12
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: {
+            tooltipFormat: 'YYYY-MM-DD HH:mm',
+            displayFormats: {
+              hour: 'MM/DD HH:mm',
+              day: 'MM/DD'
+            }
+          },
+          title: {
+            display: true,
+            text: 'Date'
+          }
+        },
+        y: {
+          title: {
+            display: true,
+            text: metricLabels[APP_STATE.selectedMetric] || APP_STATE.selectedMetric
+          },
+          beginAtZero: true
+        }
+      }
+    }
+  });
+}
+
+function attachHistoryControlHandlers() {
+  const viewModeSelector = document.getElementById('view-mode');
+  const modelSelector = document.getElementById('model-selector');
+  const timeFrameSelector = document.getElementById('time-frame');
+  const metricSelector = document.getElementById('metric-selector');
+  
+  viewModeSelector.addEventListener('change', () => {
+    APP_STATE.viewMode = viewModeSelector.value;
+    toggleView();
+  });
+  
+  modelSelector.addEventListener('change', () => {
+    APP_STATE.selectedModel = modelSelector.value;
+    renderHistoryChart();
+  });
+  
+  timeFrameSelector.addEventListener('change', () => {
+    APP_STATE.timeFrame = parseInt(timeFrameSelector.value, 10);
+    renderHistoryChart();
+  });
+  
+  metricSelector.addEventListener('change', () => {
+    APP_STATE.selectedMetric = metricSelector.value;
+    renderHistoryChart();
+  });
+}
+
 async function init() {
   try {
-    const [results, meta] = await Promise.all([
+    const [results, meta, history] = await Promise.all([
       fetchJson('data/results.json'),
-      fetchJson('data/meta.json')
+      fetchJson('data/meta.json'),
+      fetchJson('data/history.json').catch(() => []) // Fallback to empty array if history doesn't exist yet
     ]);
 
     APP_STATE.results = Array.isArray(results) ? results : [];
     APP_STATE.meta = meta || {};
+    APP_STATE.history = Array.isArray(history) ? history : [];
 
     if (APP_STATE.meta && APP_STATE.meta.error_message) {
       showNotice(APP_STATE.meta.error_message, 'error');
@@ -213,6 +438,10 @@ async function init() {
     renderTable(computeView());
     attachHeaderSortHandlers();
     attachFilterHandlers();
+    populateModelSelector();
+    attachHistoryControlHandlers();
+    toggleView();
+    
     if (APP_STATE.meta && APP_STATE.meta.generated_at) {
       document.getElementById('updated-time').textContent = formatTime(APP_STATE.meta.generated_at);
     } else {

@@ -6,6 +6,7 @@
   <title>LLM API Speed Test Dashboard</title>
   <link rel="stylesheet" href="style.css" />
   <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <header>
@@ -38,6 +39,43 @@
       </select>
       <button id="clear-filters" type="button">Clear</button>
     </div>
+    <div class="view-controls">
+      <label>
+        View:
+        <select id="view-mode">
+          <option value="table">Table</option>
+          <option value="history">Historical Charts</option>
+        </select>
+      </label>
+    </div>
+    <div id="history-controls" class="history-controls" style="display: none;">
+      <label>
+        Model:
+        <select id="model-selector">
+          <option value="all">All Models</option>
+        </select>
+      </label>
+      <label>
+        Time Frame:
+        <select id="time-frame">
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="180">Last 180 days</option>
+          <option value="365">Last 365 days</option>
+        </select>
+      </label>
+      <label>
+        Metric:
+        <select id="metric-selector">
+          <option value="nonstreaming_avg_s">Non-streaming Avg (s)</option>
+          <option value="streaming_ttfb_avg_s">Time to First Byte (s)</option>
+          <option value="streaming_total_avg_s">Streaming Total (s)</option>
+          <option value="nonstream_tokens_per_second">Non-streaming TPS</option>
+          <option value="stream_tokens_per_second">Streaming TPS</option>
+        </select>
+      </label>
+    </div>
     <div class="updated">
       Updated: <span id="updated-time">Loading...</span>
     </div>
@@ -53,70 +91,78 @@
   </header>
 
   <main>
-    <table id="results-table">
-      <thead>
-        <tr>
-          <th data-key="key"><span class="th-label">Model Key</span><span class="sort-icons" aria-hidden="true">
-            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
-            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
-            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
-          </span></th>
-          <th data-key="provider"><span class="th-label">Provider</span><span class="sort-icons" aria-hidden="true">
-            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
-            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
-            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
-          </span></th>
-          <th data-key="model"><span class="th-label">Model</span><span class="sort-icons" aria-hidden="true">
-            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
-            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
-            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
-          </span></th>
-          <th class="num" data-key="nonstreaming_avg_s"><span class="th-label">NS avg (s)</span><span class="sort-icons" aria-hidden="true">
-            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
-            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
-            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
-          </span></th>
-          <th class="num" data-key="nonstream_tokens_per_second"><span class="th-label">NS TPS</span><span class="sort-icons" aria-hidden="true">
-            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
-            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
-            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
-          </span></th>
-          <th class="num" data-key="streaming_ttfb_avg_s"><span class="th-label">TTFB (s)</span><span class="sort-icons" aria-hidden="true">
-            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
-            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
-            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
-          </span></th>
-          <th class="num" data-key="streaming_total_avg_s"><span class="th-label">Stream (s)</span><span class="sort-icons" aria-hidden="true">
-            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
-            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
-            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
-          </span></th>
-          <th class="num" data-key="stream_tokens_per_second"><span class="th-label">ST TPS</span><span class="sort-icons" aria-hidden="true">
-            <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
-            <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
-            <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
-          </span></th>
-        </tr>
-      </thead>
-      <tbody>
-      </tbody>
-    </table>
+    <div id="table-view">
+      <table id="results-table">
+        <thead>
+          <tr>
+            <th data-key="key"><span class="th-label">Model Key</span><span class="sort-icons" aria-hidden="true">
+              <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+              <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+              <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+            </span></th>
+            <th data-key="provider"><span class="th-label">Provider</span><span class="sort-icons" aria-hidden="true">
+              <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+              <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+              <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+            </span></th>
+            <th data-key="model"><span class="th-label">Model</span><span class="sort-icons" aria-hidden="true">
+              <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+              <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+              <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+            </span></th>
+            <th class="num" data-key="nonstreaming_avg_s"><span class="th-label">NS avg (s)</span><span class="sort-icons" aria-hidden="true">
+              <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+              <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+              <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+            </span></th>
+            <th class="num" data-key="nonstream_tokens_per_second"><span class="th-label">NS TPS</span><span class="sort-icons" aria-hidden="true">
+              <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+              <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+              <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+            </span></th>
+            <th class="num" data-key="streaming_ttfb_avg_s"><span class="th-label">TTFB (s)</span><span class="sort-icons" aria-hidden="true">
+              <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+              <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+              <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+            </span></th>
+            <th class="num" data-key="streaming_total_avg_s"><span class="th-label">Stream (s)</span><span class="sort-icons" aria-hidden="true">
+              <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+              <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+              <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+            </span></th>
+            <th class="num" data-key="stream_tokens_per_second"><span class="th-label">ST TPS</span><span class="sort-icons" aria-hidden="true">
+              <svg class="icon icon-sort" viewBox="0 0 24 24"><path d="M7 10l5-6 5 6H7zm10 4l-5 6-5-6h10z" fill="currentColor"/></svg>
+              <svg class="icon icon-asc" viewBox="0 0 24 24"><path d="M12 6l-6 8h12L12 6z" fill="currentColor"/></svg>
+              <svg class="icon icon-desc" viewBox="0 0 24 24"><path d="M12 18l6-8H6l6 8z" fill="currentColor"/></svg>
+            </span></th>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
 
-    <section id="definitions">
-      <h2>Definitions</h2>
-      <ul>
-        <li><strong>NS avg (s)</strong>: Average end-to-end time for a non-streaming request.</li>
-        <li><strong>NS TPS</strong>: Non-streaming throughput in tokens/sec (completion tokens divided by non-streaming duration, aggregated over runs).</li>
-        <li><strong>TTFB (s)</strong>: Time-to-first-token during streaming; measured from stream start until first chunk arrives.</li>
-        <li><strong>Stream (s)</strong>: Total streaming time from start to last chunk.</li>
-        <li><strong>ST TPS</strong>: Streaming throughput in tokens/sec (completion tokens divided by total streaming time; estimated from characters if usage is unavailable).</li>
-      </ul>
-    </section>
+      <section id="definitions">
+        <h2>Definitions</h2>
+        <ul>
+          <li><strong>NS avg (s)</strong>: Average end-to-end time for a non-streaming request.</li>
+          <li><strong>NS TPS</strong>: Non-streaming throughput in tokens/sec (completion tokens divided by non-streaming duration, aggregated over runs).</li>
+          <li><strong>TTFB (s)</strong>: Time-to-first-token during streaming; measured from stream start until first chunk arrives.</li>
+          <li><strong>Stream (s)</strong>: Total streaming time from start to last chunk.</li>
+          <li><strong>ST TPS</strong>: Streaming throughput in tokens/sec (completion tokens divided by total streaming time; estimated from characters if usage is unavailable).</li>
+        </ul>
+      </section>
+    </div>
+    
+    <div id="history-view" style="display: none;">
+      <div class="chart-container">
+        <canvas id="history-chart"></canvas>
+      </div>
+    </div>
   </main>
 
   <footer>
     <small>
-      Data auto-updates hourly. Configure display in config.js or via URL params.
+      Data auto-updates every 4 hours.
     </small>
   </footer>
 
