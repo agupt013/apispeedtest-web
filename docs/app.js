@@ -1039,13 +1039,32 @@ async function init() {
     if (window.APISPEEDTEST_CONFIG.ENABLE_VISITOR_COUNTER) {
       const counterEl = document.getElementById('visitor-count-value');
       const storageKey = 'apispeedtest-visit-count';
+      const visitedKey = 'apispeedtest-visited-session';
       let count = 0;
+      
+      // Check if we've already counted this visit in this session
+      const hasVisited = sessionStorage.getItem(visitedKey) === 'true';
+      
       try {
         count = Number(localStorage.getItem(storageKey) || '0');
         if (!Number.isFinite(count) || count < 0) count = 0;
-      } catch {}
-      count += 1;
-      try { localStorage.setItem(storageKey, String(count)); } catch {}
+        
+        // Only increment if this is a new session
+        if (!hasVisited) {
+          count += 1;
+          // Mark this session as visited
+          sessionStorage.setItem(visitedKey, 'true');
+          // Store the updated count
+          localStorage.setItem(storageKey, String(count));
+          console.log('[app] Visitor count incremented to:', count);
+        } else {
+          console.log('[app] Visitor already counted in this session:', count);
+        }
+      } catch (err) {
+        console.error('[app] Error handling visitor count:', err);
+      }
+      
+      // Update the UI
       if (counterEl) counterEl.textContent = String(count);
     }
   } catch (err) {
@@ -1055,7 +1074,7 @@ async function init() {
   }
 }
 
-// Initialize links/counter as soon as DOM is ready, independent of data fetch
+// Initialize links as soon as DOM is ready, independent of data fetch
 window.addEventListener('DOMContentLoaded', () => {
   try {
     const homepageUrl = (window.APISPEEDTEST_CONFIG && window.APISPEEDTEST_CONFIG.HOMEPAGE_URL) ? String(window.APISPEEDTEST_CONFIG.HOMEPAGE_URL).trim() : '';
@@ -1068,20 +1087,12 @@ window.addEventListener('DOMContentLoaded', () => {
       } catch {}
       homeLink.hidden = false;
     }
-
-    if (window.APISPEEDTEST_CONFIG && window.APISPEEDTEST_CONFIG.ENABLE_VISITOR_COUNTER) {
-      const counterEl = document.getElementById('visitor-count-value');
-      const storageKey = 'apispeedtest-visit-count';
-      let count = 0;
-      try {
-        count = Number(localStorage.getItem(storageKey) || '0');
-        if (!Number.isFinite(count) || count < 0) count = 0;
-      } catch {}
-      count += 1;
-      try { localStorage.setItem(storageKey, String(count)); } catch {}
-      if (counterEl) counterEl.textContent = String(count);
-    }
-  } catch {}
+    
+    // Note: Visitor counter is now handled only in the init() function
+    // to prevent double-counting
+  } catch (err) {
+    console.error('[app] Error in DOMContentLoaded:', err);
+  }
 
   init();
 });
