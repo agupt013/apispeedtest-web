@@ -10,7 +10,8 @@ let APP_STATE = {
   selectedModel: 'all',
   timeFrame: 30, // days
   selectedMetric: 'nonstreaming_avg_s',
-  historyChart: null
+  historyChart: null,
+  metricCharts: {} // Holds charts for all metrics view
 };
 
 function showNotice(msg, kind) {
@@ -205,18 +206,60 @@ function toggleView() {
   const historyView = document.getElementById('history-view');
   const historyControls = document.getElementById('history-controls');
   const filters = document.querySelector('.filters');
+  const singleChartView = document.getElementById('single-chart-view');
+  const allMetricsView = document.getElementById('all-metrics-view');
   
   if (APP_STATE.viewMode === 'table') {
+    // Show table view
     tableView.style.display = 'block';
     historyView.style.display = 'none';
     historyControls.style.display = 'none';
     filters.style.display = 'flex';
+    
+    // Destroy charts if they exist to prevent memory leaks
+    destroyAllCharts();
   } else {
+    // Show history view
     tableView.style.display = 'none';
     historyView.style.display = 'block';
     historyControls.style.display = 'flex';
     filters.style.display = 'none';
-    renderHistoryChart();
+    
+    // Check if we should show single chart or all metrics
+    if (APP_STATE.selectedMetric === 'all') {
+      singleChartView.style.display = 'none';
+      allMetricsView.style.display = 'block';
+      
+      // Render all metric charts
+      renderAllMetricCharts();
+    } else {
+      singleChartView.style.display = 'block';
+      allMetricsView.style.display = 'none';
+      
+      // Make sure the chart container is empty and has a fresh canvas
+      singleChartView.innerHTML = '<canvas id="history-chart"></canvas>';
+      
+      // Small delay to ensure DOM is updated before rendering chart
+      setTimeout(() => {
+        renderHistoryChart();
+      }, 50);
+    }
+  }
+}
+
+function destroyAllCharts() {
+  // Destroy main chart if it exists
+  if (APP_STATE.historyChart) {
+    APP_STATE.historyChart.destroy();
+    APP_STATE.historyChart = null;
+  }
+  
+  // Destroy all metric charts if they exist
+  if (APP_STATE.metricCharts) {
+    Object.values(APP_STATE.metricCharts).forEach(chart => {
+      if (chart) chart.destroy();
+    });
+    APP_STATE.metricCharts = {};
   }
 }
 
@@ -263,11 +306,267 @@ function getHistoryData() {
   return filteredData;
 }
 
-function renderHistoryChart() {
-  const ctx = document.getElementById('history-chart').getContext('2d');
+// Custom plugin to add IDs to legend items
+const LegendItemIDPlugin = {
+  id: 'legendItemID',
+  afterRender: (chart) => {
+    // Add IDs to legend items after chart is rendered
+    const legendItems = chart.legend.legendItems;
+    const legendContainer = chart.canvas.parentNode.querySelector('.chartjs-legend-list-wrapper');
+    
+    if (legendContainer) {
+      const listItems = legendContainer.querySelectorAll('li');
+      listItems.forEach((item, index) => {
+        if (index < legendItems.length) {
+          item.id = `chart-legend-item-${index}`;
+        }
+      });
+    }
+  }
+};
+
+// Function to render all metric charts
+function renderAllMetricCharts() {
+  // List of all metrics to render
+  const metrics = [
+    'nonstreaming_avg_s',
+    'streaming_ttfb_avg_s',
+    'streaming_total_avg_s',
+    'nonstream_tokens_per_second',
+    'stream_tokens_per_second'
+  ];
+  
+  // Initialize metricCharts object if not exists
+  if (!APP_STATE.metricCharts) {
+    APP_STATE.metricCharts = {};
+  }
+  
+  // Render each metric chart
+  metrics.forEach(metric => {
+    renderMetricChart(metric);
+  });
+}
+
+// Function to render a single metric chart
+function renderMetricChart(metric) {
+  const chartId = `chart-${metric}`;
+  const chartElement = document.getElementById(chartId);
+  
+  if (!chartElement) {
+    console.error(`[app] Chart element not found for metric: ${metric}`);
+    return;
+  }
+  
+  const ctx = chartElement.getContext('2d');
+  if (!ctx) {
+    console.error(`[app] Failed to get 2d context for chart: ${metric}`);
+    return;
+  }
+  
+  // Register custom plugin
+  Chart.register(LegendItemIDPlugin);
   
   // Get filtered data
   const data = getHistoryData();
+  
+  // Group data by model
+  const modelData = {};
+  data.forEach(entry => {
+    if (!modelData[entry.key]) {
+      modelData[entry.key] = [];
+    }
+    modelData[entry.key].push({
+      x: new Date(entry.timestamp),
+      y: entry[metric]
+    });
+  });
+  
+  // Sort data points by date for each model
+  Object.keys(modelData).forEach(model => {
+    modelData[model].sort((a, b) => a.x - b.x);
+  });
+  
+  // Generate colors and point styles for each model
+  const colors = {};
+  const pointStyles = {};
+  
+  const providerBaseColors = {
+    'openai': 120,  // Green
+    'azure': 210,   // Blue
+    'anthropic': 280, // Purple
+    'gemini': 30,   // Orange
+    'llama': 60,    // Yellow
+    'default': 0    // Red
+  };
+  
+  // Available point styles for models
+  const availablePointStyles = [
+    'circle', 'triangle', 'rect', 'star', 'cross', 'crossRot', 
+    'rectRounded', 'rectRot', 'dash', 'line', 'diamond'
+  ];
+  
+  // First, group models by provider
+  const modelsByProvider = {};
+  Object.keys(modelData).forEach(model => {
+    const provider = data.find(entry => entry.key === model)?.provider || 'default';
+    if (!modelsByProvider[provider]) {
+      modelsByProvider[provider] = [];
+    }
+    modelsByProvider[provider].push(model);
+  });
+  
+  // Then assign colors by provider and unique point styles for each model
+  let styleIndex = 0;
+  Object.entries(modelsByProvider).forEach(([provider, models]) => {
+    const baseHue = providerBaseColors[provider] || providerBaseColors.default;
+    
+    models.forEach((model, idx) => {
+      // Vary lightness within provider
+      const lightness = 40 + (idx % 5) * 10;
+      colors[model] = `hsl(${baseHue}, 70%, ${lightness}%)`;
+      
+      // Assign a unique point style to each model
+      pointStyles[model] = availablePointStyles[styleIndex % availablePointStyles.length];
+      styleIndex++;
+    });
+  });
+  
+  // Create datasets for Chart.js
+  const datasets = Object.keys(modelData).map(model => ({
+    label: model,
+    data: modelData[model],
+    borderColor: colors[model],
+    backgroundColor: colors[model] + '33', // Add transparency
+    tension: 0.2,
+    pointStyle: pointStyles[model],
+    pointRadius: 4,
+    pointHoverRadius: 6
+  }));
+  
+  // If no data, show a message
+  if (datasets.length === 0) {
+    console.log(`[app] No data available for chart: ${metric}`);
+    const noDataEl = document.createElement('div');
+    noDataEl.className = 'no-data-message';
+    noDataEl.textContent = 'No historical data available for the selected criteria.';
+    
+    const chartContainer = chartElement.parentNode;
+    chartContainer.innerHTML = '';
+    chartContainer.appendChild(noDataEl);
+    return;
+  }
+  
+  // Get metric label for chart title
+  const metricLabels = {
+    'nonstreaming_avg_s': 'Non-streaming Average (seconds)',
+    'streaming_ttfb_avg_s': 'Time to First Byte (seconds)',
+    'streaming_total_avg_s': 'Streaming Total (seconds)',
+    'nonstream_tokens_per_second': 'Non-streaming Tokens per Second',
+    'stream_tokens_per_second': 'Streaming Tokens per Second'
+  };
+  
+  // Destroy previous chart if it exists
+  if (APP_STATE.metricCharts[metric]) {
+    APP_STATE.metricCharts[metric].destroy();
+  }
+  
+  // Create new chart with simplified options for the grid view
+  APP_STATE.metricCharts[metric] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: {
+          display: false // Title is already in the HTML
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          callbacks: {
+            title: function(context) {
+              if (context.length > 0) {
+                const date = new Date(context[0].parsed.x);
+                return date.toLocaleString();
+              }
+              return '';
+            }
+          }
+        },
+        legend: {
+          position: 'bottom',
+          align: 'start',
+          labels: {
+            boxWidth: 8,
+            boxHeight: 8,
+            padding: 10,
+            usePointStyle: true,
+            pointStyleWidth: 8,
+            font: {
+              size: 10
+            }
+          },
+          maxHeight: 100
+        }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: {
+            unit: 'day',
+            tooltipFormat: 'yyyy-MM-dd'
+          },
+          ticks: {
+            font: {
+              size: 10
+            }
+          }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            font: {
+              size: 10
+            }
+          }
+        }
+      },
+      elements: {
+        point: {
+          radius: 3,
+          hitRadius: 8,
+          hoverRadius: 5
+        },
+        line: {
+          borderWidth: 2
+        }
+      }
+    }
+  });
+}
+
+function renderHistoryChart() {
+  const chartElement = document.getElementById('history-chart');
+  if (!chartElement) {
+    console.error('[app] Chart element not found');
+    return;
+  }
+  
+  const ctx = chartElement.getContext('2d');
+  if (!ctx) {
+    console.error('[app] Failed to get 2d context for chart');
+    return;
+  }
+  
+  // Register custom plugin
+  Chart.register(LegendItemIDPlugin);
+  
+  // Get filtered data
+  const data = getHistoryData();
+  console.log('[app] History data for chart:', data);
   
   // Group data by model
   const modelData = {};
@@ -281,34 +580,56 @@ function renderHistoryChart() {
     });
   });
   
+  console.log('[app] Grouped model data:', modelData);
+  
   // Sort data points by date for each model
   Object.keys(modelData).forEach(model => {
     modelData[model].sort((a, b) => a.x - b.x);
   });
   
-  // Generate random colors for each model
+  // Generate colors and point styles for each model
   const colors = {};
-  Object.keys(modelData).forEach((model, index) => {
-    // Generate colors based on provider
-    const provider = data.find(entry => entry.key === model)?.provider || '';
-    
-    // Assign color based on provider
-    switch(provider) {
-      case 'openai':
-        colors[model] = `hsl(120, 70%, ${40 + (index % 5) * 10}%)`;
-        break;
-      case 'azure':
-        colors[model] = `hsl(210, 70%, ${40 + (index % 5) * 10}%)`;
-        break;
-      case 'anthropic':
-        colors[model] = `hsl(280, 70%, ${40 + (index % 5) * 10}%)`;
-        break;
-      case 'gemini':
-        colors[model] = `hsl(30, 70%, ${40 + (index % 5) * 10}%)`;
-        break;
-      default:
-        colors[model] = `hsl(${(index * 60) % 360}, 70%, 50%)`;
+  const pointStyles = {};
+  
+  const providerBaseColors = {
+    'openai': 120,  // Green
+    'azure': 210,   // Blue
+    'anthropic': 280, // Purple
+    'gemini': 30,   // Orange
+    'llama': 60,    // Yellow
+    'default': 0    // Red
+  };
+  
+  // Available point styles for models
+  const availablePointStyles = [
+    'circle', 'triangle', 'rect', 'star', 'cross', 'crossRot', 
+    'rectRounded', 'rectRot', 'dash', 'line', 'diamond'
+  ];
+  
+  // First, group models by provider
+  const modelsByProvider = {};
+  Object.keys(modelData).forEach(model => {
+    const provider = data.find(entry => entry.key === model)?.provider || 'default';
+    if (!modelsByProvider[provider]) {
+      modelsByProvider[provider] = [];
     }
+    modelsByProvider[provider].push(model);
+  });
+  
+  // Then assign colors by provider and unique point styles for each model
+  let styleIndex = 0;
+  Object.entries(modelsByProvider).forEach(([provider, models]) => {
+    const baseHue = providerBaseColors[provider] || providerBaseColors.default;
+    
+    models.forEach((model, idx) => {
+      // Vary lightness within provider
+      const lightness = 40 + (idx % 5) * 10;
+      colors[model] = `hsl(${baseHue}, 70%, ${lightness}%)`;
+      
+      // Assign a unique point style to each model
+      pointStyles[model] = availablePointStyles[styleIndex % availablePointStyles.length];
+      styleIndex++;
+    });
   });
   
   // Create datasets for Chart.js
@@ -318,8 +639,23 @@ function renderHistoryChart() {
     borderColor: colors[model],
     backgroundColor: colors[model] + '33', // Add transparency
     tension: 0.2,
-    pointRadius: 3
+    pointStyle: pointStyles[model],
+    pointRadius: 5,
+    pointHoverRadius: 8
   }));
+  
+  // If no data, show a message
+  if (datasets.length === 0) {
+    console.log('[app] No data available for chart');
+    const noDataEl = document.createElement('div');
+    noDataEl.className = 'no-data-message';
+    noDataEl.textContent = 'No historical data available for the selected criteria.';
+    
+    const chartContainer = document.querySelector('.chart-container');
+    chartContainer.innerHTML = '';
+    chartContainer.appendChild(noDataEl);
+    return;
+  }
   
   // Get metric label for chart title
   const metricLabels = {
@@ -354,24 +690,113 @@ function renderHistoryChart() {
         },
         tooltip: {
           mode: 'index',
-          intersect: false
+          intersect: false,
+          callbacks: {
+            // Highlight the corresponding legend item when hovering over a line
+            label: function(context) {
+              // Find the legend element for this dataset
+              const legendId = `chart-legend-item-${context.datasetIndex}`;
+              
+              // Highlight all legend items first
+              document.querySelectorAll('.chart-legend-highlight').forEach(el => {
+                el.classList.remove('chart-legend-highlight');
+              });
+              
+              // Add highlight class to the current legend item
+              setTimeout(() => {
+                const legendEl = document.getElementById(legendId);
+                if (legendEl) {
+                  legendEl.classList.add('chart-legend-highlight');
+                }
+              }, 0);
+              
+              // Return the standard tooltip text with formatted value
+              const label = context.dataset.label || '';
+              const value = context.parsed.y !== null ? context.parsed.y.toFixed(3) : 'N/A';
+              return `${label}: ${value}`;
+            },
+            
+            // Add a title to the tooltip showing the exact date
+            title: function(context) {
+              if (context.length > 0) {
+                const date = new Date(context[0].parsed.x);
+                return date.toLocaleString();
+              }
+              return '';
+            }
+          }
         },
         legend: {
           position: 'bottom',
+          align: 'start',
           labels: {
-            boxWidth: 12
+            boxWidth: 10,
+            boxHeight: 10,
+            padding: 15,
+            usePointStyle: true,
+            pointStyleWidth: 10,
+            font: {
+              size: 11
+            },
+            // Add unique ID to each legend item for highlighting
+            generateLabels: function(chart) {
+              const datasets = chart.data.datasets;
+              const legendItems = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+              
+              // Add ID to each legend item
+              legendItems.forEach((item, index) => {
+                item.datasetIndex = index;
+                item.fillStyle = datasets[index].backgroundColor;
+                item.strokeStyle = datasets[index].borderColor;
+                item.pointStyle = datasets[index].pointStyle;
+                item.text = datasets[index].label;
+                item.lineWidth = 1;
+                // Add unique ID for each legend item
+                item.id = `chart-legend-item-${index}`;
+              });
+              
+              return legendItems;
+            }
+          },
+          title: {
+            display: true,
+            text: 'Click to toggle visibility',
+            font: {
+              size: 10,
+              style: 'italic'
+            }
+          },
+          maxHeight: 250,
+          onClick: function(e, legendItem, legend) {
+            // Toggle visibility when clicking on legend
+            const index = legendItem.datasetIndex;
+            const ci = legend.chart;
+            const meta = ci.getDatasetMeta(index);
+            
+            // Toggle visibility
+            meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null;
+            
+            // Update chart
+            ci.update();
           }
+        }
+      },
+      elements: {
+        point: {
+          hitRadius: 10,
+          hoverRadius: 6
         }
       },
       scales: {
         x: {
           type: 'time',
           time: {
-            tooltipFormat: 'YYYY-MM-DD HH:mm',
+            tooltipFormat: 'yyyy-MM-dd HH:mm',
             displayFormats: {
-              hour: 'MM/DD HH:mm',
-              day: 'MM/DD'
-            }
+              hour: 'MMM d HH:mm',
+              day: 'MMM d'
+            },
+            unit: 'day'
           },
           title: {
             display: true,
@@ -403,17 +828,86 @@ function attachHistoryControlHandlers() {
   
   modelSelector.addEventListener('change', () => {
     APP_STATE.selectedModel = modelSelector.value;
-    renderHistoryChart();
+    
+    if (APP_STATE.selectedMetric === 'all') {
+      // For all metrics view, re-render all charts
+      destroyAllCharts();
+      renderAllMetricCharts();
+    } else {
+      // For single chart view
+      const chartContainer = document.getElementById('single-chart-view');
+      if (chartContainer) {
+        // Destroy existing chart if any
+        if (APP_STATE.historyChart) {
+          APP_STATE.historyChart.destroy();
+          APP_STATE.historyChart = null;
+        }
+        
+        // Create fresh canvas
+        chartContainer.innerHTML = '<canvas id="history-chart"></canvas>';
+        
+        // Small delay to ensure DOM is updated
+        setTimeout(() => {
+          renderHistoryChart();
+        }, 50);
+      }
+    }
   });
   
   timeFrameSelector.addEventListener('change', () => {
     APP_STATE.timeFrame = parseInt(timeFrameSelector.value, 10);
-    renderHistoryChart();
+    
+    if (APP_STATE.selectedMetric === 'all') {
+      // For all metrics view, re-render all charts
+      destroyAllCharts();
+      renderAllMetricCharts();
+    } else {
+      // For single chart view
+      renderHistoryChart();
+    }
   });
   
   metricSelector.addEventListener('change', () => {
     APP_STATE.selectedMetric = metricSelector.value;
-    renderHistoryChart();
+    
+    // Toggle between single chart and all metrics views
+    const singleChartView = document.getElementById('single-chart-view');
+    const allMetricsView = document.getElementById('all-metrics-view');
+    
+    if (APP_STATE.selectedMetric === 'all') {
+      // Switch to all metrics view
+      singleChartView.style.display = 'none';
+      allMetricsView.style.display = 'block';
+      
+      // Destroy single chart if it exists
+      if (APP_STATE.historyChart) {
+        APP_STATE.historyChart.destroy();
+        APP_STATE.historyChart = null;
+      }
+      
+      // Render all metric charts
+      renderAllMetricCharts();
+    } else {
+      // Switch to single chart view
+      singleChartView.style.display = 'block';
+      allMetricsView.style.display = 'none';
+      
+      // Destroy all metric charts if they exist
+      if (APP_STATE.metricCharts) {
+        Object.values(APP_STATE.metricCharts).forEach(chart => {
+          if (chart) chart.destroy();
+        });
+        APP_STATE.metricCharts = {};
+      }
+      
+      // Create fresh canvas for single chart
+      singleChartView.innerHTML = '<canvas id="history-chart"></canvas>';
+      
+      // Render the single chart
+      setTimeout(() => {
+        renderHistoryChart();
+      }, 50);
+    }
   });
 }
 
@@ -440,6 +934,12 @@ async function init() {
     attachFilterHandlers();
     populateModelSelector();
     attachHistoryControlHandlers();
+    // Initialize metricCharts object
+    APP_STATE.metricCharts = {};
+    
+    // Start in table view by default
+    APP_STATE.viewMode = 'table';
+    APP_STATE.selectedMetric = 'nonstreaming_avg_s'; // Default to a single metric view
     toggleView();
     
     if (APP_STATE.meta && APP_STATE.meta.generated_at) {

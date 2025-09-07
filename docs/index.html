@@ -6,7 +6,9 @@
   <title>LLM API Speed Test Dashboard</title>
   <link rel="stylesheet" href="style.css" />
   <script src="config.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.0.1/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.2.0/dist/chartjs-adapter-luxon.min.js"></script>
 </head>
 <body>
   <header>
@@ -65,16 +67,17 @@
           <option value="365">Last 365 days</option>
         </select>
       </label>
-      <label>
-        Metric:
-        <select id="metric-selector">
-          <option value="nonstreaming_avg_s">Non-streaming Avg (s)</option>
-          <option value="streaming_ttfb_avg_s">Time to First Byte (s)</option>
-          <option value="streaming_total_avg_s">Streaming Total (s)</option>
-          <option value="nonstream_tokens_per_second">Non-streaming TPS</option>
-          <option value="stream_tokens_per_second">Streaming TPS</option>
-        </select>
-      </label>
+        <label>
+          Metric:
+          <select id="metric-selector">
+            <option value="nonstreaming_avg_s">Non-streaming Avg (s)</option>
+            <option value="streaming_ttfb_avg_s">Time to First Byte (s)</option>
+            <option value="streaming_total_avg_s">Streaming Total (s)</option>
+            <option value="nonstream_tokens_per_second">Non-streaming TPS</option>
+            <option value="stream_tokens_per_second">Streaming TPS</option>
+            <option value="all">All Metrics</option>
+          </select>
+        </label>
     </div>
     <div class="updated">
       Updated: <span id="updated-time">Loading...</span>
@@ -154,8 +157,45 @@
     </div>
     
     <div id="history-view" style="display: none;">
-      <div class="chart-container">
+      <!-- Single chart view -->
+      <div id="single-chart-view" class="chart-container">
         <canvas id="history-chart"></canvas>
+      </div>
+      
+      <!-- All metrics view -->
+      <div id="all-metrics-view" style="display: none;">
+        <div class="metrics-grid">
+          <div class="metric-chart">
+            <h3>Non-streaming Average (s)</h3>
+            <div class="chart-container">
+              <canvas id="chart-nonstreaming_avg_s"></canvas>
+            </div>
+          </div>
+          <div class="metric-chart">
+            <h3>Time to First Byte (s)</h3>
+            <div class="chart-container">
+              <canvas id="chart-streaming_ttfb_avg_s"></canvas>
+            </div>
+          </div>
+          <div class="metric-chart">
+            <h3>Streaming Total (s)</h3>
+            <div class="chart-container">
+              <canvas id="chart-streaming_total_avg_s"></canvas>
+            </div>
+          </div>
+          <div class="metric-chart">
+            <h3>Non-streaming TPS</h3>
+            <div class="chart-container">
+              <canvas id="chart-nonstream_tokens_per_second"></canvas>
+            </div>
+          </div>
+          <div class="metric-chart">
+            <h3>Streaming TPS</h3>
+            <div class="chart-container">
+              <canvas id="chart-stream_tokens_per_second"></canvas>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </main>
