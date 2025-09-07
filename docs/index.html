@@ -9,6 +9,14 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/luxon@3.0.1/build/global/luxon.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.2.0/dist/chartjs-adapter-luxon.min.js"></script>
+  <script>
+    // Ensure Chart.js is properly configured for time scales
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('Chart.js version:', Chart.version);
+      console.log('Luxon loaded:', typeof luxon !== 'undefined');
+      console.log('Chart.js time adapter registered:', Chart.defaults.scales?.time !== undefined);
+    });
+  </script>
 </head>
 <body>
   <header>
@@ -60,6 +68,7 @@
       <label>
         Time Frame:
         <select id="time-frame">
+          <option value="1">Last 24 hours</option>
           <option value="7">Last 7 days</option>
           <option value="30">Last 30 days</option>
           <option value="90">Last 90 days</option>
@@ -75,7 +84,7 @@
             <option value="streaming_total_avg_s">Streaming Total (s)</option>
             <option value="nonstream_tokens_per_second">Non-streaming TPS</option>
             <option value="stream_tokens_per_second">Streaming TPS</option>
-            <option value="all">All Metrics</option>
+            <option value="all" selected>All Metrics</option>
           </select>
         </label>
     </div>
@@ -88,6 +97,7 @@
         <span class="link-label">Home</span>
       </a>
       <a id="download-results" href="data/results.json" download>Download results.json</a>
+      <a id="download-history" href="data/history.json" download>Download history.json</a>
       <span id="visitor-counter" aria-live="polite">Visitors: <span id="visitor-count-value">--</span></span>
     </div>
     <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>

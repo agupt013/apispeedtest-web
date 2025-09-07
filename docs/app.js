@@ -209,6 +209,8 @@ function toggleView() {
   const singleChartView = document.getElementById('single-chart-view');
   const allMetricsView = document.getElementById('all-metrics-view');
   
+  console.log(`[app] Toggling view mode to: ${APP_STATE.viewMode}, metric: ${APP_STATE.selectedMetric}`);
+  
   if (APP_STATE.viewMode === 'table') {
     // Show table view
     tableView.style.display = 'block';
@@ -225,14 +227,22 @@ function toggleView() {
     historyControls.style.display = 'flex';
     filters.style.display = 'none';
     
+    // Update the metric selector to match the current state
+    const metricSelector = document.getElementById('metric-selector');
+    if (metricSelector && metricSelector.value !== APP_STATE.selectedMetric) {
+      metricSelector.value = APP_STATE.selectedMetric;
+    }
+    
     // Check if we should show single chart or all metrics
     if (APP_STATE.selectedMetric === 'all') {
+      console.log('[app] Showing all metrics view');
       singleChartView.style.display = 'none';
       allMetricsView.style.display = 'block';
       
       // Render all metric charts
       renderAllMetricCharts();
     } else {
+      console.log('[app] Showing single chart view');
       singleChartView.style.display = 'block';
       allMetricsView.style.display = 'none';
       
@@ -375,8 +385,11 @@ function renderMetricChart(metric) {
     if (!modelData[entry.key]) {
       modelData[entry.key] = [];
     }
+    const dateObj = new Date(entry.timestamp);
+    console.log(`[app] Creating metric point for ${entry.key}: timestamp=${entry.timestamp}, parsed date=${dateObj.toISOString()}`);
+    
     modelData[entry.key].push({
-      x: new Date(entry.timestamp),
+      x: dateObj,
       y: entry[metric]
     });
   });
@@ -517,9 +530,20 @@ function renderMetricChart(metric) {
           type: 'time',
           time: {
             unit: 'day',
-            tooltipFormat: 'yyyy-MM-dd'
+            tooltipFormat: 'yyyy-MM-dd',
+            displayFormats: {
+              hour: 'MMM d HH:mm',
+              day: 'MMM d',
+              week: 'MMM d',
+              month: 'MMM yyyy'
+            },
+            round: 'day'
           },
           ticks: {
+            source: 'auto',
+            autoSkip: true,
+            maxRotation: 0,
+            display: true,
             font: {
               size: 10
             }
@@ -568,14 +592,23 @@ function renderHistoryChart() {
   const data = getHistoryData();
   console.log('[app] History data for chart:', data);
   
+  // Debug log the raw data to check timestamps
+  if (data.length > 0) {
+    console.log('[app] Sample data point timestamp:', data[0].timestamp);
+    console.log('[app] Sample data parsed as date:', new Date(data[0].timestamp));
+  }
+  
   // Group data by model
   const modelData = {};
   data.forEach(entry => {
     if (!modelData[entry.key]) {
       modelData[entry.key] = [];
     }
+    const dateObj = new Date(entry.timestamp);
+    console.log(`[app] Creating point for ${entry.key}: timestamp=${entry.timestamp}, parsed date=${dateObj.toISOString()}`);
+    
     modelData[entry.key].push({
-      x: new Date(entry.timestamp),
+      x: dateObj,
       y: entry[APP_STATE.selectedMetric]
     });
   });
@@ -794,13 +827,22 @@ function renderHistoryChart() {
             tooltipFormat: 'yyyy-MM-dd HH:mm',
             displayFormats: {
               hour: 'MMM d HH:mm',
-              day: 'MMM d'
+              day: 'MMM d',
+              week: 'MMM d',
+              month: 'MMM yyyy'
             },
-            unit: 'day'
+            unit: 'day',
+            round: 'day'
           },
           title: {
             display: true,
             text: 'Date'
+          },
+          ticks: {
+            source: 'auto',
+            autoSkip: true,
+            maxRotation: 0,
+            display: true
           }
         },
         y: {
@@ -934,13 +976,21 @@ async function init() {
     attachFilterHandlers();
     populateModelSelector();
     attachHistoryControlHandlers();
-    // Initialize metricCharts object
-    APP_STATE.metricCharts = {};
-    
-    // Start in table view by default
-    APP_STATE.viewMode = 'table';
-    APP_STATE.selectedMetric = 'nonstreaming_avg_s'; // Default to a single metric view
-    toggleView();
+  // Initialize metricCharts object
+  APP_STATE.metricCharts = {};
+  
+  // Initialize view settings
+  APP_STATE.viewMode = 'history'; // Start with history view to show charts
+  APP_STATE.selectedMetric = 'all'; // Default to all metrics view
+  APP_STATE.timeFrame = 30; // Set timeframe to 30 days by default
+  
+  // Update UI elements to match state
+  document.getElementById('view-mode').value = 'history';
+  document.getElementById('metric-selector').value = 'all';
+  document.getElementById('time-frame').value = '30';
+  
+  // Toggle view to apply settings
+  toggleView();
     
     if (APP_STATE.meta && APP_STATE.meta.generated_at) {
       document.getElementById('updated-time').textContent = formatTime(APP_STATE.meta.generated_at);
