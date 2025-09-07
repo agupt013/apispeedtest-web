@@ -297,6 +297,23 @@ function populateModelSelector() {
     option.textContent = model;
     selector.appendChild(option);
   });
+  
+  // Set the selected model from APP_STATE
+  // This is especially important when restoring from localStorage
+  if (APP_STATE.selectedModel && models.has(APP_STATE.selectedModel)) {
+    selector.value = APP_STATE.selectedModel;
+  } else {
+    // If the saved model doesn't exist in the current results, reset to 'all'
+    APP_STATE.selectedModel = 'all';
+    selector.value = 'all';
+    
+    // Update localStorage
+    try {
+      localStorage.setItem('apispeedtest-selected-model', 'all');
+    } catch (err) {
+      console.error('[app] Error saving reset model to localStorage:', err);
+    }
+  }
 }
 
 function getHistoryData() {
@@ -1051,11 +1068,24 @@ function attachHistoryControlHandlers() {
   
   viewModeSelector.addEventListener('change', () => {
     APP_STATE.viewMode = viewModeSelector.value;
+    // Save preference to localStorage
+    try {
+      localStorage.setItem('apispeedtest-view-mode', APP_STATE.viewMode);
+    } catch (err) {
+      console.error('[app] Error saving view mode to localStorage:', err);
+    }
     toggleView();
   });
   
   modelSelector.addEventListener('change', () => {
     APP_STATE.selectedModel = modelSelector.value;
+    
+    // Save preference to localStorage
+    try {
+      localStorage.setItem('apispeedtest-selected-model', APP_STATE.selectedModel);
+    } catch (err) {
+      console.error('[app] Error saving selected model to localStorage:', err);
+    }
     
     if (APP_STATE.selectedMetric === 'all') {
       // For all metrics view, re-render all charts
@@ -1085,6 +1115,13 @@ function attachHistoryControlHandlers() {
   timeFrameSelector.addEventListener('change', () => {
     APP_STATE.timeFrame = parseInt(timeFrameSelector.value, 10);
     
+    // Save preference to localStorage
+    try {
+      localStorage.setItem('apispeedtest-time-frame', String(APP_STATE.timeFrame));
+    } catch (err) {
+      console.error('[app] Error saving time frame to localStorage:', err);
+    }
+    
     if (APP_STATE.selectedMetric === 'all') {
       // For all metrics view, re-render all charts
       destroyAllCharts();
@@ -1097,6 +1134,13 @@ function attachHistoryControlHandlers() {
   
   metricSelector.addEventListener('change', () => {
     APP_STATE.selectedMetric = metricSelector.value;
+    
+    // Save preference to localStorage
+    try {
+      localStorage.setItem('apispeedtest-selected-metric', APP_STATE.selectedMetric);
+    } catch (err) {
+      console.error('[app] Error saving selected metric to localStorage:', err);
+    }
     
     // Toggle between single chart and all metrics views
     const singleChartView = document.getElementById('single-chart-view');
@@ -1165,15 +1209,31 @@ async function init() {
   // Initialize metricCharts object
   APP_STATE.metricCharts = {};
   
-  // Initialize view settings
-  APP_STATE.viewMode = 'history'; // Start with history view to show charts
-  APP_STATE.selectedMetric = 'all'; // Default to all metrics view
-  APP_STATE.timeFrame = 30; // Set timeframe to 30 days by default
+  // Initialize view settings from localStorage or use defaults
+  try {
+    // Get saved preferences from localStorage
+    APP_STATE.viewMode = localStorage.getItem('apispeedtest-view-mode') || 'table';
+    APP_STATE.selectedMetric = localStorage.getItem('apispeedtest-selected-metric') || 'all';
+    APP_STATE.timeFrame = parseInt(localStorage.getItem('apispeedtest-time-frame') || '30', 10);
+    APP_STATE.selectedModel = localStorage.getItem('apispeedtest-selected-model') || 'all';
+    
+    console.log(`[app] Restored view settings from localStorage: viewMode=${APP_STATE.viewMode}, metric=${APP_STATE.selectedMetric}, model=${APP_STATE.selectedModel}, timeFrame=${APP_STATE.timeFrame}`);
+  } catch (err) {
+    console.error('[app] Error restoring view settings:', err);
+    // Fallback to defaults if localStorage fails
+    APP_STATE.viewMode = 'table';
+    APP_STATE.selectedMetric = 'all';
+    APP_STATE.selectedModel = 'all';
+    APP_STATE.timeFrame = 30;
+  }
   
   // Update UI elements to match state
-  document.getElementById('view-mode').value = 'history';
-  document.getElementById('metric-selector').value = 'all';
-  document.getElementById('time-frame').value = '30';
+  document.getElementById('view-mode').value = APP_STATE.viewMode;
+  document.getElementById('metric-selector').value = APP_STATE.selectedMetric;
+  document.getElementById('time-frame').value = String(APP_STATE.timeFrame);
+  
+  // We'll set the model selector after populating it with options
+  // This happens in populateModelSelector()
   
   // Toggle view to apply settings
   toggleView();
