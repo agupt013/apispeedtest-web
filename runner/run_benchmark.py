@@ -51,9 +51,9 @@ def build_config_from_env() -> RunConfig:
 	return cfg
 
 
-def write_meta(path: Path, cfg: RunConfig, error_message: str | None = None) -> Dict[str, Any]:
+def write_meta(path: Path, cfg: RunConfig, timestamp: str = None, error_message: str | None = None) -> Dict[str, Any]:
 	meta: Dict[str, Any] = {
-		"generated_at": datetime.now(timezone.utc).isoformat(),
+		"generated_at": timestamp or datetime.now(timezone.utc).isoformat(),
 		"runs": cfg.runs,
 		"mode": cfg.mode,
 		"models": cfg.models,
@@ -153,6 +153,8 @@ def run() -> None:
 
 	results: List[ModelLatencySummary] = []
 	result_updated_at: Dict[str, str] = {}
+	# Use a single timestamp for all models
+	benchmark_timestamp = datetime.now(timezone.utc).isoformat()
 	reg = list_models(DEFAULT_REGISTRY)
 	LOGGER.info("Starting benchmark for %d models", len(cfg.models))
 	error_message: str | None = None
@@ -179,14 +181,14 @@ def run() -> None:
 			res = None
 		if res is not None:
 			results.append(res)
-			# Record per-model completion timestamp (UTC)
-			result_updated_at[res.key] = datetime.now(timezone.utc).isoformat()
+			# Use the same timestamp for all models
+			result_updated_at[res.key] = benchmark_timestamp
 			LOGGER.info("Completed model %s", key)
 
 	# Write meta.json with optional error
 	if not results and error_message is None:
 		error_message = "No benchmark results were produced. Check API keys and configuration."
-	meta = write_meta(OUTPUT_DIR / "meta.json", cfg, error_message=error_message)
+	meta = write_meta(OUTPUT_DIR / "meta.json", cfg, timestamp=benchmark_timestamp, error_message=error_message)
 	LOGGER.info("Wrote meta.json")
 
 	# Write results.json including per-model updated_at

@@ -9,7 +9,7 @@ let APP_STATE = {
   viewMode: 'table', // 'table' | 'history'
   selectedModel: 'all',
   timeFrame: 30, // days
-  selectedMetric: 'nonstreaming_avg_s',
+  selectedMetric: 'all',
   historyChart: null,
   metricCharts: {} // Holds charts for all metrics view
 };
@@ -304,13 +304,39 @@ function getHistoryData() {
   const now = new Date();
   const cutoff = new Date(now.getTime() - (APP_STATE.timeFrame * 24 * 60 * 60 * 1000));
   
+  console.log(`[app] Filtering history data from ${cutoff.toISOString()} to ${now.toISOString()}`);
+  
   let filteredData = APP_STATE.history.filter(entry => {
-    const entryDate = new Date(entry.timestamp);
-    return entryDate >= cutoff;
+    try {
+      const entryDate = new Date(entry.timestamp);
+      return entryDate >= cutoff;
+    } catch (err) {
+      console.error('[app] Error parsing entry timestamp:', err, entry);
+      return false;
+    }
   });
+  
+  console.log(`[app] Found ${filteredData.length} entries within time frame`);
   
   if (APP_STATE.selectedModel !== 'all') {
     filteredData = filteredData.filter(entry => entry.key === APP_STATE.selectedModel);
+    console.log(`[app] Filtered to ${filteredData.length} entries for model ${APP_STATE.selectedModel}`);
+  }
+  
+  // Sort data by timestamp to ensure proper ordering
+  filteredData.sort((a, b) => {
+    const dateA = new Date(a.timestamp);
+    const dateB = new Date(b.timestamp);
+    return dateA - dateB;
+  });
+  
+  // Log some sample timestamps to help with debugging
+  if (filteredData.length > 0) {
+    console.log('[app] Sample timestamps:');
+    for (let i = 0; i < Math.min(5, filteredData.length); i++) {
+      const entry = filteredData[i];
+      console.log(`  ${entry.key}: ${entry.timestamp} -> ${new Date(entry.timestamp).toLocaleString()}`);
+    }
   }
   
   return filteredData;
@@ -385,18 +411,44 @@ function renderMetricChart(metric) {
     if (!modelData[entry.key]) {
       modelData[entry.key] = [];
     }
-    const dateObj = new Date(entry.timestamp);
-    console.log(`[app] Creating metric point for ${entry.key}: timestamp=${entry.timestamp}, parsed date=${dateObj.toISOString()}`);
     
-    modelData[entry.key].push({
-      x: dateObj,
-      y: entry[metric]
-    });
+    try {
+      // Format the date for display
+      let timestamp = entry.timestamp;
+      
+      // Create date object for validation
+      const dateObj = new Date(timestamp);
+      
+      // Validate date
+      if (isNaN(dateObj.getTime())) {
+        console.error(`[app] Invalid date from timestamp: ${entry.timestamp}`);
+        return;
+      }
+      
+      // Format date for display
+      const formattedDate = dateObj.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      
+      console.log(`[app] Creating metric point for ${entry.key}: timestamp=${entry.timestamp}, formatted=${formattedDate}`);
+      
+      modelData[entry.key].push({
+        x: formattedDate, // Use formatted string instead of Date object
+        y: entry[metric],
+        _date: dateObj // Keep original date for sorting
+      });
+    } catch (err) {
+      console.error(`[app] Error parsing date for ${entry.key}:`, err, entry.timestamp);
+    }
   });
   
   // Sort data points by date for each model
   Object.keys(modelData).forEach(model => {
-    modelData[model].sort((a, b) => a.x - b.x);
+    modelData[model].sort((a, b) => a._date - b._date);
   });
   
   // Generate colors and point styles for each model
@@ -453,7 +505,10 @@ function renderMetricChart(metric) {
     tension: 0.2,
     pointStyle: pointStyles[model],
     pointRadius: 4,
-    pointHoverRadius: 6
+    pointHoverRadius: 6,
+    pointHoverBorderWidth: 2,
+    pointHoverBackgroundColor: colors[model],
+    pointHoverBorderColor: 'white'
   }));
   
   // If no data, show a message
@@ -492,6 +547,10 @@ function renderMetricChart(metric) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false,
+      },
       plugins: {
         title: {
           display: false // Title is already in the HTML
@@ -499,13 +558,56 @@ function renderMetricChart(metric) {
         tooltip: {
           mode: 'index',
           intersect: false,
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          borderColor: 'rgba(255,255,255,0.2)',
+          borderWidth: 1,
+          padding: 10,
+          displayColors: true,
+          boxWidth: 10,
+          boxHeight: 10,
+          usePointStyle: true,
           callbacks: {
             title: function(context) {
-              if (context.length > 0) {
-                const date = new Date(context[0].parsed.x);
-                return date.toLocaleString();
+              try {
+                if (context && context.length > 0 && context[0].parsed && context[0].parsed.x) {
+                  const date = new Date(context[0].parsed.x);
+                  return date.toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                  });
+                }
+                return '';
+              } catch (err) {
+                console.error('Error in tooltip title callback:', err);
+                return '';
               }
-              return '';
+            },
+            label: function(context) {
+              try {
+                const label = context.dataset.label || '';
+                const value = context.parsed.y !== null ? context.parsed.y.toFixed(3) : 'N/A';
+                const symbol = context.dataset.pointStyle || '●';
+                
+                // Highlight the current item
+                if (context.tooltip && context.tooltip.dataPoints && 
+                    context.tooltip.dataPoints.length > 0 && 
+                    context.datasetIndex === context.tooltip.dataPoints[0].datasetIndex) {
+                  return ' ' + symbol + ' ' + label + ': ' + value + ' ← CURRENT';
+                }
+                return ' ' + symbol + ' ' + label + ': ' + value;
+              } catch (err) {
+                console.error('Error in tooltip label callback:', err);
+                const label = context.dataset ? (context.dataset.label || '') : '';
+                const value = context.parsed && context.parsed.y !== null ? context.parsed.y.toFixed(3) : 'N/A';
+                return `${label}: ${value}`;
+              }
             }
           }
         },
@@ -527,25 +629,36 @@ function renderMetricChart(metric) {
       },
       scales: {
         x: {
-          type: 'time',
-          time: {
-            unit: 'day',
-            tooltipFormat: 'yyyy-MM-dd',
-            displayFormats: {
-              hour: 'MMM d HH:mm',
-              day: 'MMM d',
-              week: 'MMM d',
-              month: 'MMM yyyy'
-            },
-            round: 'day'
+          type: 'category',
+          grid: {
+            display: true,
+            color: 'rgba(0,0,0,0.2)',
+            lineWidth: 1
+          },
+          border: {
+            display: true,
+            width: 2,
+            color: 'rgba(0,0,0,0.5)'
+          },
+          title: {
+            display: true,
+            text: 'Date & Time',
+            color: '#333',
+            font: {
+              size: 12,
+              weight: 'bold'
+            }
           },
           ticks: {
-            source: 'auto',
             autoSkip: true,
-            maxRotation: 0,
+            maxRotation: 90,
+            minRotation: 45,
             display: true,
+            color: '#000',
+            padding: 8,
             font: {
-              size: 10
+              size: 10,
+              weight: 'bold'
             }
           }
         },
@@ -604,20 +717,46 @@ function renderHistoryChart() {
     if (!modelData[entry.key]) {
       modelData[entry.key] = [];
     }
-    const dateObj = new Date(entry.timestamp);
-    console.log(`[app] Creating point for ${entry.key}: timestamp=${entry.timestamp}, parsed date=${dateObj.toISOString()}`);
     
-    modelData[entry.key].push({
-      x: dateObj,
-      y: entry[APP_STATE.selectedMetric]
-    });
+    try {
+      // Format the date for display
+      let timestamp = entry.timestamp;
+      
+      // Create date object for validation
+      const dateObj = new Date(timestamp);
+      
+      // Validate date
+      if (isNaN(dateObj.getTime())) {
+        console.error(`[app] Invalid date from timestamp: ${entry.timestamp}`);
+        return;
+      }
+      
+      // Format date for display
+      const formattedDate = dateObj.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      
+      console.log(`[app] Creating point for ${entry.key}: timestamp=${entry.timestamp}, formatted=${formattedDate}`);
+      
+      modelData[entry.key].push({
+        x: formattedDate, // Use formatted string instead of Date object
+        y: entry[APP_STATE.selectedMetric],
+        _date: dateObj // Keep original date for sorting
+      });
+    } catch (err) {
+      console.error(`[app] Error parsing date for ${entry.key}:`, err, entry.timestamp);
+    }
   });
   
   console.log('[app] Grouped model data:', modelData);
   
   // Sort data points by date for each model
   Object.keys(modelData).forEach(model => {
-    modelData[model].sort((a, b) => a.x - b.x);
+    modelData[model].sort((a, b) => a._date - b._date);
   });
   
   // Generate colors and point styles for each model
@@ -674,7 +813,10 @@ function renderHistoryChart() {
     tension: 0.2,
     pointStyle: pointStyles[model],
     pointRadius: 5,
-    pointHoverRadius: 8
+    pointHoverRadius: 8,
+    pointHoverBorderWidth: 2,
+    pointHoverBackgroundColor: colors[model],
+    pointHoverBorderColor: 'white'
   }));
   
   // If no data, show a message
@@ -713,6 +855,10 @@ function renderHistoryChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false,
+      },
       plugins: {
         title: {
           display: true,
@@ -724,38 +870,68 @@ function renderHistoryChart() {
         tooltip: {
           mode: 'index',
           intersect: false,
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          borderColor: 'rgba(255,255,255,0.2)',
+          borderWidth: 1,
+          padding: 10,
+          displayColors: true,
+          boxWidth: 10,
+          boxHeight: 10,
+          usePointStyle: true,
           callbacks: {
             // Highlight the corresponding legend item when hovering over a line
             label: function(context) {
-              // Find the legend element for this dataset
-              const legendId = `chart-legend-item-${context.datasetIndex}`;
-              
-              // Highlight all legend items first
-              document.querySelectorAll('.chart-legend-highlight').forEach(el => {
-                el.classList.remove('chart-legend-highlight');
-              });
-              
-              // Add highlight class to the current legend item
-              setTimeout(() => {
-                const legendEl = document.getElementById(legendId);
-                if (legendEl) {
-                  legendEl.classList.add('chart-legend-highlight');
+              try {
+                // Find the legend element for this dataset
+                const legendId = `chart-legend-item-${context.datasetIndex}`;
+                
+                // Highlight all legend items first
+                document.querySelectorAll('.chart-legend-highlight').forEach(el => {
+                  el.classList.remove('chart-legend-highlight');
+                });
+                
+                // Add highlight class to the current legend item
+                setTimeout(() => {
+                  const legendEl = document.getElementById(legendId);
+                  if (legendEl) {
+                    legendEl.classList.add('chart-legend-highlight');
+                  }
+                }, 0);
+                
+                // Return the enhanced tooltip text with symbol and formatted value
+                const label = context.dataset.label || '';
+                const value = context.parsed.y !== null ? context.parsed.y.toFixed(3) : 'N/A';
+                const symbol = context.dataset.pointStyle || '●';
+                
+                // Highlight the current item
+                if (context.tooltip && context.tooltip.dataPoints && 
+                    context.tooltip.dataPoints.length > 0 && 
+                    context.datasetIndex === context.tooltip.dataPoints[0].datasetIndex) {
+                  return ' ' + symbol + ' ' + label + ': ' + value + ' ← CURRENT';
                 }
-              }, 0);
-              
-              // Return the standard tooltip text with formatted value
-              const label = context.dataset.label || '';
-              const value = context.parsed.y !== null ? context.parsed.y.toFixed(3) : 'N/A';
-              return `${label}: ${value}`;
+                return ' ' + symbol + ' ' + label + ': ' + value;
+              } catch (err) {
+                console.error('Error in tooltip label callback:', err);
+                const label = context.dataset ? (context.dataset.label || '') : '';
+                const value = context.parsed && context.parsed.y !== null ? context.parsed.y.toFixed(3) : 'N/A';
+                return `${label}: ${value}`;
+              }
             },
             
-            // Add a title to the tooltip showing the exact date
+            // Add a title to the tooltip showing the exact date and time
             title: function(context) {
-              if (context.length > 0) {
-                const date = new Date(context[0].parsed.x);
-                return date.toLocaleString();
+              try {
+                if (context && context.length > 0) {
+                  // Use the formatted date string directly
+                  return context[0].label || '';
+                }
+                return '';
+              } catch (err) {
+                console.error('Error in tooltip title callback:', err);
+                return '';
               }
-              return '';
             }
           }
         },
@@ -822,27 +998,37 @@ function renderHistoryChart() {
       },
       scales: {
         x: {
-          type: 'time',
-          time: {
-            tooltipFormat: 'yyyy-MM-dd HH:mm',
-            displayFormats: {
-              hour: 'MMM d HH:mm',
-              day: 'MMM d',
-              week: 'MMM d',
-              month: 'MMM yyyy'
-            },
-            unit: 'day',
-            round: 'day'
+          type: 'category',
+          grid: {
+            display: true,
+            color: 'rgba(0,0,0,0.2)',
+            lineWidth: 1
+          },
+          border: {
+            display: true,
+            width: 2,
+            color: 'rgba(0,0,0,0.5)'
           },
           title: {
             display: true,
-            text: 'Date'
+            text: 'Date & Time',
+            color: '#333',
+            font: {
+              size: 14,
+              weight: 'bold'
+            }
           },
           ticks: {
-            source: 'auto',
             autoSkip: true,
-            maxRotation: 0,
-            display: true
+            maxRotation: 90,
+            minRotation: 45,
+            display: true,
+            color: '#000',
+            padding: 8,
+            font: {
+              size: 11,
+              weight: 'bold'
+            }
           }
         },
         y: {
@@ -1074,9 +1260,54 @@ async function init() {
   }
 }
 
+// Add error logging
+window.addEventListener('error', function(event) {
+  console.error('Global error caught:', event.error);
+});
+
+// Debug function to check Chart.js adapter
+function debugChartAdapter() {
+  console.log('Chart version:', Chart.version);
+  console.log('Chart.js adapters available:', !!Chart.adapters);
+  
+  // Check if Luxon is available
+  if (typeof luxon !== 'undefined') {
+    console.log('Luxon loaded:', true);
+    console.log('Luxon version:', luxon.VERSION || 'unknown');
+  } else {
+    console.error('Luxon not loaded!');
+  }
+  
+  // Check if the time scale is registered
+  console.log('Time scale registered:', !!Chart.defaults.scales.time);
+  
+  // Check date parsing
+  const testDate = new Date('2025-09-07T12:00:00Z');
+  console.log('Test date parsing:', testDate, 'isValid:', !isNaN(testDate.getTime()));
+}
+
 // Initialize links as soon as DOM is ready, independent of data fetch
 window.addEventListener('DOMContentLoaded', () => {
   try {
+    // Debug Chart.js adapter
+    debugChartAdapter();
+    
+    // Ensure Chart.js adapter is registered
+    if (!Chart.defaults.scales.time) {
+      console.error('[app] Chart.js time scale not registered! Attempting to register...');
+      
+      // Try to register the adapter manually if needed
+      if (typeof luxon !== 'undefined' && Chart.adapters) {
+        console.log('[app] Manually registering time adapter...');
+        
+        // Register adapter if needed
+        if (typeof window._chartjs_adapter_luxon !== 'undefined') {
+          window._chartjs_adapter_luxon.register();
+          console.log('[app] Adapter registered manually.');
+        }
+      }
+    }
+    
     const homepageUrl = (window.APISPEEDTEST_CONFIG && window.APISPEEDTEST_CONFIG.HOMEPAGE_URL) ? String(window.APISPEEDTEST_CONFIG.HOMEPAGE_URL).trim() : '';
     const homeLink = document.getElementById('homepage-link');
     if (homeLink && homepageUrl) {
