@@ -451,7 +451,7 @@ function renderMetricChart(metric) {
         hour12: false
       });
       
-      console.log(`[app] Creating metric point for ${entry.key}: timestamp=${entry.timestamp}, formatted=${formattedDate}`);
+      console.log(`[app] Creating metric point for ${entry.key}: timestamp=${entry.timestamp}, parsed=${dateObj.toISOString()}, formatted=${formattedDate}`);
       
       modelData[entry.key].push({
         x: formattedDate, // Use formatted string instead of Date object
@@ -588,17 +588,24 @@ function renderMetricChart(metric) {
           callbacks: {
             title: function(context) {
               try {
-                if (context && context.length > 0 && context[0].parsed && context[0].parsed.x) {
-                  const date = new Date(context[0].parsed.x);
-                  return date.toLocaleString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false
-                  });
+                if (context && context.length > 0) {
+                  // Get the original timestamp from the data point
+                  const dataPoint = context[0].raw;
+                  if (dataPoint && dataPoint._date) {
+                    // Format the date properly
+                    return dataPoint._date.toLocaleString('en-US', {
+                      weekday: 'short',
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: false
+                    });
+                  }
+                  // Fallback to label if _date is not available
+                  return context[0].label || '';
                 }
                 return '';
               } catch (err) {
@@ -757,7 +764,7 @@ function renderHistoryChart() {
         hour12: false
       });
       
-      console.log(`[app] Creating point for ${entry.key}: timestamp=${entry.timestamp}, formatted=${formattedDate}`);
+      console.log(`[app] Creating point for ${entry.key}: timestamp=${entry.timestamp}, parsed=${dateObj.toISOString()}, formatted=${formattedDate}`);
       
       modelData[entry.key].push({
         x: formattedDate, // Use formatted string instead of Date object
@@ -941,7 +948,22 @@ function renderHistoryChart() {
             title: function(context) {
               try {
                 if (context && context.length > 0) {
-                  // Use the formatted date string directly
+                  // Get the original timestamp from the data point
+                  const dataPoint = context[0].raw;
+                  if (dataPoint && dataPoint._date) {
+                    // Format the date properly
+                    return dataPoint._date.toLocaleString('en-US', {
+                      weekday: 'short',
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: false
+                    });
+                  }
+                  // Fallback to label if _date is not available
                   return context[0].label || '';
                 }
                 return '';
