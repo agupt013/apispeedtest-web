@@ -7,7 +7,7 @@ let APP_STATE = {
   searchQuery: '',
   provider: '',
   viewMode: 'table', // 'table' | 'history'
-  selectedModel: 'all',
+  selectedModels: ['all'], // Array to hold multiple selected models
   timeFrame: 30, // days
   selectedMetric: 'all',
   historyChart: null,
@@ -274,11 +274,44 @@ function destroyAllCharts() {
 }
 
 function populateModelSelector() {
-  const selector = document.getElementById('model-selector');
+  const checkboxList = document.getElementById('model-checkbox-list');
+  const allModelsCheckbox = document.getElementById('model-all');
   
-  // Clear existing options except the first one
-  while (selector.options.length > 1) {
-    selector.remove(1);
+  // Add event listener to the "All Models" checkbox
+  allModelsCheckbox.addEventListener('change', function() {
+    const isChecked = this.checked;
+    
+    // Get all model checkboxes (except "All Models")
+    const modelCheckboxes = document.querySelectorAll('#model-checkbox-list input[type="checkbox"]:not(#model-all)');
+    
+    // Update APP_STATE
+    if (isChecked) {
+      APP_STATE.selectedModels = ['all'];
+      
+      // Uncheck all other checkboxes
+      modelCheckboxes.forEach(checkbox => {
+        checkbox.checked = false;
+      });
+    } else {
+      // If unchecking "All Models" with nothing else selected, keep it checked
+      if (APP_STATE.selectedModels.length <= 1) {
+        this.checked = true;
+        return;
+      }
+      
+      // Remove 'all' from selected models
+      APP_STATE.selectedModels = APP_STATE.selectedModels.filter(model => model !== 'all');
+    }
+    
+    // Save to localStorage and update charts
+    saveModelSelection();
+    updateChartsBasedOnSelection();
+  });
+  
+  // Clear existing checkboxes except the first one (All Models)
+  const children = Array.from(checkboxList.children);
+  for (let i = 1; i < children.length; i++) {
+    checkboxList.removeChild(children[i]);
   }
   
   // Add models from results
@@ -290,28 +323,170 @@ function populateModelSelector() {
   // Sort models alphabetically
   const sortedModels = Array.from(models).sort();
   
-  // Add options to selector
+  // Add checkboxes for each model
   sortedModels.forEach(model => {
-    const option = document.createElement('option');
-    option.value = model;
-    option.textContent = model;
-    selector.appendChild(option);
+    // Skip 'all' as it's already added in HTML
+    if (model === 'all') return;
+    
+    const checkboxItem = document.createElement('div');
+    checkboxItem.className = 'checkbox-item';
+    
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = `model-${model}`;
+    checkbox.value = model;
+    
+    // Check if this model is in the selected models
+    checkbox.checked = APP_STATE.selectedModels.includes(model);
+    
+    // Add event listener to each checkbox
+    checkbox.addEventListener('change', function() {
+      handleModelCheckboxChange(this);
+    });
+    
+    const label = document.createElement('label');
+    label.htmlFor = `model-${model}`;
+    label.textContent = model;
+    
+    checkboxItem.appendChild(checkbox);
+    checkboxItem.appendChild(label);
+    checkboxList.appendChild(checkboxItem);
   });
   
-  // Set the selected model from APP_STATE
-  // This is especially important when restoring from localStorage
-  if (APP_STATE.selectedModel && models.has(APP_STATE.selectedModel)) {
-    selector.value = APP_STATE.selectedModel;
-  } else {
-    // If the saved model doesn't exist in the current results, reset to 'all'
-    APP_STATE.selectedModel = 'all';
-    selector.value = 'all';
+  // Add event listeners to the control buttons
+  document.getElementById('select-all-models').addEventListener('click', function() {
+    // Get all model checkboxes
+    const modelCheckboxes = document.querySelectorAll('#model-checkbox-list input[type="checkbox"]:not(#model-all)');
     
-    // Update localStorage
-    try {
-      localStorage.setItem('apispeedtest-selected-model', 'all');
-    } catch (err) {
-      console.error('[app] Error saving reset model to localStorage:', err);
+    // Check all model checkboxes
+    modelCheckboxes.forEach(checkbox => {
+      checkbox.checked = true;
+    });
+    
+    // Uncheck the "All Models" checkbox
+    allModelsCheckbox.checked = false;
+    
+    // Update APP_STATE
+    APP_STATE.selectedModels = sortedModels;
+    
+    // Save and update charts
+    saveModelSelection();
+    updateChartsBasedOnSelection();
+  });
+  
+  document.getElementById('clear-model-selection').addEventListener('click', function() {
+    // Get all model checkboxes
+    const modelCheckboxes = document.querySelectorAll('#model-checkbox-list input[type="checkbox"]:not(#model-all)');
+    
+    // Uncheck all model checkboxes
+    modelCheckboxes.forEach(checkbox => {
+      checkbox.checked = false;
+    });
+    
+    // Check the "All Models" checkbox
+    allModelsCheckbox.checked = true;
+    
+    // Update APP_STATE
+    APP_STATE.selectedModels = ['all'];
+    
+    // Save and update charts
+    saveModelSelection();
+    updateChartsBasedOnSelection();
+  });
+  
+  // Update the checkbox states based on APP_STATE
+  updateCheckboxesFromState();
+}
+
+function handleModelCheckboxChange(checkbox) {
+  const allModelsCheckbox = document.getElementById('model-all');
+  const modelValue = checkbox.value;
+  const isChecked = checkbox.checked;
+  
+  // Update APP_STATE.selectedModels
+  if (isChecked) {
+    // If checking a specific model, uncheck "All Models"
+    if (allModelsCheckbox.checked) {
+      allModelsCheckbox.checked = false;
+      APP_STATE.selectedModels = [];
+    }
+    
+    // Add this model to the selected models
+    if (!APP_STATE.selectedModels.includes(modelValue)) {
+      APP_STATE.selectedModels.push(modelValue);
+    }
+  } else {
+    // Remove this model from selected models
+    APP_STATE.selectedModels = APP_STATE.selectedModels.filter(model => model !== modelValue);
+    
+    // If no models are selected, check "All Models"
+    if (APP_STATE.selectedModels.length === 0) {
+      allModelsCheckbox.checked = true;
+      APP_STATE.selectedModels = ['all'];
+    }
+  }
+  
+  // Save to localStorage and update charts
+  saveModelSelection();
+  updateChartsBasedOnSelection();
+}
+
+function updateCheckboxesFromState() {
+  const allModelsCheckbox = document.getElementById('model-all');
+  
+  // If "all" is in the selected models, check only the "All Models" checkbox
+  if (APP_STATE.selectedModels.includes('all')) {
+    allModelsCheckbox.checked = true;
+    
+    // Uncheck all other checkboxes
+    document.querySelectorAll('#model-checkbox-list input[type="checkbox"]:not(#model-all)').forEach(checkbox => {
+      checkbox.checked = false;
+    });
+  } else {
+    // Uncheck "All Models" and check the specific models
+    allModelsCheckbox.checked = false;
+    
+    // Check the appropriate model checkboxes
+    APP_STATE.selectedModels.forEach(model => {
+      const checkbox = document.getElementById(`model-${model}`);
+      if (checkbox) {
+        checkbox.checked = true;
+      }
+    });
+  }
+}
+
+function saveModelSelection() {
+  try {
+    localStorage.setItem('apispeedtest-selected-models', JSON.stringify(APP_STATE.selectedModels));
+    console.log(`[app] Saved selected models to localStorage: ${APP_STATE.selectedModels.join(', ')}`);
+  } catch (err) {
+    console.error('[app] Error saving selected models to localStorage:', err);
+  }
+}
+
+function updateChartsBasedOnSelection() {
+  if (APP_STATE.selectedMetric === 'all') {
+    // For all metrics view, re-render all charts
+    destroyAllCharts();
+    renderAllMetricCharts();
+  } else {
+    // For single chart view
+    const chartContainer = document.getElementById('single-chart-view');
+    if (chartContainer) {
+      // Destroy existing chart if any
+      if (APP_STATE.historyChart) {
+        APP_STATE.historyChart.destroy();
+        APP_STATE.historyChart = null;
+      }
+      
+      // Create fresh canvas
+      chartContainer.innerHTML = '<canvas id="history-chart"></canvas>';
+      
+      // Small delay to ensure DOM is updated
+      setTimeout(() => {
+        renderHistoryChart();
+      }, 50);
     }
   }
 }
@@ -335,9 +510,10 @@ function getHistoryData() {
   
   console.log(`[app] Found ${filteredData.length} entries within time frame`);
   
-  if (APP_STATE.selectedModel !== 'all') {
-    filteredData = filteredData.filter(entry => entry.key === APP_STATE.selectedModel);
-    console.log(`[app] Filtered to ${filteredData.length} entries for model ${APP_STATE.selectedModel}`);
+  // Check if we need to filter by models
+  if (!(APP_STATE.selectedModels.length === 1 && APP_STATE.selectedModels[0] === 'all')) {
+    filteredData = filteredData.filter(entry => APP_STATE.selectedModels.includes(entry.key));
+    console.log(`[app] Filtered to ${filteredData.length} entries for selected models: ${APP_STATE.selectedModels.join(', ')}`);
   }
   
   // Sort data by timestamp to ensure proper ordering
@@ -1099,14 +1275,16 @@ function attachHistoryControlHandlers() {
     toggleView();
   });
   
-  modelSelector.addEventListener('change', () => {
-    APP_STATE.selectedModel = modelSelector.value;
+  // The model selector is now handled by checkbox event listeners in populateModelSelector()
+  
+  timeFrameSelector.addEventListener('change', () => {
+    APP_STATE.timeFrame = parseInt(timeFrameSelector.value, 10);
     
     // Save preference to localStorage
     try {
-      localStorage.setItem('apispeedtest-selected-model', APP_STATE.selectedModel);
+      localStorage.setItem('apispeedtest-time-frame', String(APP_STATE.timeFrame));
     } catch (err) {
-      console.error('[app] Error saving selected model to localStorage:', err);
+      console.error('[app] Error saving time frame to localStorage:', err);
     }
     
     if (APP_STATE.selectedMetric === 'all') {
@@ -1237,15 +1415,33 @@ async function init() {
     APP_STATE.viewMode = localStorage.getItem('apispeedtest-view-mode') || 'table';
     APP_STATE.selectedMetric = localStorage.getItem('apispeedtest-selected-metric') || 'all';
     APP_STATE.timeFrame = parseInt(localStorage.getItem('apispeedtest-time-frame') || '30', 10);
-    APP_STATE.selectedModel = localStorage.getItem('apispeedtest-selected-model') || 'all';
     
-    console.log(`[app] Restored view settings from localStorage: viewMode=${APP_STATE.viewMode}, metric=${APP_STATE.selectedMetric}, model=${APP_STATE.selectedModel}, timeFrame=${APP_STATE.timeFrame}`);
+    // Get selected models from localStorage
+    const savedModels = localStorage.getItem('apispeedtest-selected-models');
+    if (savedModels) {
+      try {
+        APP_STATE.selectedModels = JSON.parse(savedModels);
+        // Ensure it's an array
+        if (!Array.isArray(APP_STATE.selectedModels)) {
+          APP_STATE.selectedModels = ['all'];
+        }
+      } catch (parseErr) {
+        console.error('[app] Error parsing saved models:', parseErr);
+        APP_STATE.selectedModels = ['all'];
+      }
+    } else {
+      // For backward compatibility with old selectedModel
+      const oldModel = localStorage.getItem('apispeedtest-selected-model');
+      APP_STATE.selectedModels = oldModel ? [oldModel] : ['all'];
+    }
+    
+    console.log(`[app] Restored view settings from localStorage: viewMode=${APP_STATE.viewMode}, metric=${APP_STATE.selectedMetric}, models=${APP_STATE.selectedModels.join(', ')}, timeFrame=${APP_STATE.timeFrame}`);
   } catch (err) {
     console.error('[app] Error restoring view settings:', err);
     // Fallback to defaults if localStorage fails
     APP_STATE.viewMode = 'table';
     APP_STATE.selectedMetric = 'all';
-    APP_STATE.selectedModel = 'all';
+    APP_STATE.selectedModels = ['all'];
     APP_STATE.timeFrame = 30;
   }
   

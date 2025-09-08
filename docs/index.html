@@ -20,23 +20,53 @@
 </head>
 <body>
   <header>
-    <h1>LLM API Speed Test</h1>
-    <div class="controls">
+    <div class="header-container">
+      <div class="header-left">
+        <h1>LLM API Speed Test</h1>
+        <div class="controls">
+          <label>
+            Time display:
+            <select id="time-mode">
+              <option value="relative">Relative</option>
+              <option value="absolute">Absolute</option>
+            </select>
+          </label>
+          <label>
+            Timezone:
+            <select id="timezone">
+              <option value="local">Local</option>
+              <option value="UTC">UTC</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      
+      <div class="header-right">
+        <div class="action-buttons">
+          <a id="homepage-link" href="#" target="_self" rel="noopener" hidden>
+            <svg class="icon icon-home" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 8h-3v9h-5v-6H11v6H6v-9H3l9-8z" fill="currentColor"/></svg>
+            <span class="link-label">Home</span>
+          </a>
+          <a id="download-results" href="data/results.json" download>Download results.json</a>
+          <a id="download-history" href="data/history.json" download>Download history.json</a>
+        </div>
+        <div class="updated">
+          Updated: <span id="updated-time">Loading...</span>
+        </div>
+        <span id="visitor-counter" aria-live="polite">Visitors: <span id="visitor-count-value">--</span></span>
+      </div>
+    </div>
+    
+    <div class="view-controls">
       <label>
-        Time display:
-        <select id="time-mode">
-          <option value="relative">Relative</option>
-          <option value="absolute">Absolute</option>
-        </select>
-      </label>
-      <label>
-        Timezone:
-        <select id="timezone">
-          <option value="local">Local</option>
-          <option value="UTC">UTC</option>
+        View:
+        <select id="view-mode">
+          <option value="table">Table</option>
+          <option value="history">Historical Charts</option>
         </select>
       </label>
     </div>
+    
     <div class="filters">
       <input id="search" type="text" placeholder="Filter by key/model..." />
       <select id="provider-filter">
@@ -49,33 +79,20 @@
       </select>
       <button id="clear-filters" type="button">Clear</button>
     </div>
-    <div class="view-controls">
-      <label>
-        View:
-        <select id="view-mode">
-          <option value="table">Table</option>
-          <option value="history">Historical Charts</option>
-        </select>
-      </label>
-    </div>
+    
     <div id="history-controls" class="history-controls" style="display: none;">
-      <label>
-        Model:
-        <select id="model-selector">
-          <option value="all">All Models</option>
-        </select>
-      </label>
-      <label>
-        Time Frame:
-        <select id="time-frame">
-          <option value="1">Last 24 hours</option>
-          <option value="7">Last 7 days</option>
-          <option value="30">Last 30 days</option>
-          <option value="90">Last 90 days</option>
-          <option value="180">Last 180 days</option>
-          <option value="365">Last 365 days</option>
-        </select>
-      </label>
+      <div class="chart-options">
+        <label>
+          Time Frame:
+          <select id="time-frame">
+            <option value="1">Last 24 hours</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="180">Last 180 days</option>
+            <option value="365">Last 365 days</option>
+          </select>
+        </label>
         <label>
           Metric:
           <select id="metric-selector">
@@ -87,19 +104,9 @@
             <option value="all" selected>All Metrics</option>
           </select>
         </label>
+      </div>
     </div>
-    <div class="updated">
-      Updated: <span id="updated-time">Loading...</span>
-    </div>
-    <div class="meta-bar">
-      <a id="homepage-link" href="#" target="_self" rel="noopener" hidden>
-        <svg class="icon icon-home" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 8h-3v9h-5v-6H11v6H6v-9H3l9-8z" fill="currentColor"/></svg>
-        <span class="link-label">Home</span>
-      </a>
-      <a id="download-results" href="data/results.json" download>Download results.json</a>
-      <a id="download-history" href="data/history.json" download>Download history.json</a>
-      <span id="visitor-counter" aria-live="polite">Visitors: <span id="visitor-count-value">--</span></span>
-    </div>
+    
     <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
   </header>
 
@@ -166,43 +173,64 @@
       </section>
     </div>
     
-    <div id="history-view" style="display: none;">
-      <!-- Single chart view -->
-      <div id="single-chart-view" class="chart-container">
-        <canvas id="history-chart"></canvas>
+    <div id="history-view" style="display: none;" class="two-column-layout">
+      <!-- Left sidebar for model selection -->
+      <div class="sidebar">
+        <div class="sidebar-content">
+          <h3 class="sidebar-title">Model Selection</h3>
+          <div class="model-filter-controls">
+            <button id="select-all-models" type="button">Select All</button>
+            <button id="clear-model-selection" type="button">Clear All</button>
+          </div>
+          <div id="model-checkbox-list" class="checkbox-list">
+            <!-- Checkboxes will be added here dynamically -->
+            <div class="checkbox-item">
+              <input type="checkbox" id="model-all" value="all" checked>
+              <label for="model-all">All Models</label>
+            </div>
+          </div>
+        </div>
       </div>
       
-      <!-- All metrics view -->
-      <div id="all-metrics-view" style="display: none;">
-        <div class="metrics-grid">
-          <div class="metric-chart">
-            <h3>Non-streaming Average (s)</h3>
-            <div class="chart-container">
-              <canvas id="chart-nonstreaming_avg_s"></canvas>
+      <!-- Right content for charts -->
+      <div class="main-content">
+        <!-- Single chart view -->
+        <div id="single-chart-view" class="chart-container">
+          <canvas id="history-chart"></canvas>
+        </div>
+        
+        <!-- All metrics view -->
+        <div id="all-metrics-view" style="display: none;">
+          <div class="metrics-grid">
+            <div class="metric-chart">
+              <h3>Non-streaming Average (s)</h3>
+              <div class="chart-container">
+                <canvas id="chart-nonstreaming_avg_s"></canvas>
+              </div>
             </div>
-          </div>
-          <div class="metric-chart">
-            <h3>Time to First Byte (s)</h3>
-            <div class="chart-container">
-              <canvas id="chart-streaming_ttfb_avg_s"></canvas>
+            <div class="metric-chart">
+              <h3>Time to First Byte (s)</h3>
+              <div class="chart-container">
+                <canvas id="chart-streaming_ttfb_avg_s"></canvas>
+              </div>
             </div>
-          </div>
-          <div class="metric-chart">
-            <h3>Streaming Total (s)</h3>
-            <div class="chart-container">
-              <canvas id="chart-streaming_total_avg_s"></canvas>
+            <div class="metric-chart">
+              <h3>Streaming Total (s)</h3>
+              <div class="chart-container">
+                <canvas id="chart-streaming_total_avg_s"></canvas>
+              </div>
             </div>
-          </div>
-          <div class="metric-chart">
-            <h3>Non-streaming TPS</h3>
-            <div class="chart-container">
-              <canvas id="chart-nonstream_tokens_per_second"></canvas>
+            <div class="metric-chart">
+              <h3>Non-streaming TPS</h3>
+              <div class="chart-container">
+                <canvas id="chart-nonstream_tokens_per_second"></canvas>
+              </div>
             </div>
-          </div>
-          <div class="metric-chart">
-            <h3>Streaming TPS</h3>
-            <div class="chart-container">
-              <canvas id="chart-stream_tokens_per_second"></canvas>
+            <div class="metric-chart">
+              <h3>Streaming TPS</h3>
+              <div class="chart-container">
+                <canvas id="chart-stream_tokens_per_second"></canvas>
+              </div>
             </div>
           </div>
         </div>
