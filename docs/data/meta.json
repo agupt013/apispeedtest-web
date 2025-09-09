@@ -1,5 +1,5 @@
 {
-  "generated_at": "2025-09-09T01:09:09.916089+00:00",
+  "generated_at": "2025-09-09T04:18:01.960597+00:00",
   "runs": 3,
   "mode": "both",
   "models": [
@@ -23,5 +23,5 @@
     "llama:llama3-70b-8192"
   ],
   "request_timeout_seconds": 60.0,
-  "error_message": "Benchmark failures encountered. Last error: BadRequestError: Error code: 400 - {'error': {'message': 'Your organization must be verified to stream this model. Please go to: https://platform.openai.com/settings/organization/general and click on Verify Organization. If you just verified, it can take up to 15 minutes for access to propagate.', 'type': 'invalid_request_error', 'param': 'stream', 'code': 'unsupported_value'}}"
+  "error_message": "Benchmark failures encountered. Last error: RateLimitError: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}"
 }
