@@ -494,14 +494,55 @@ function updateChartsBasedOnSelection() {
 function getHistoryData() {
   // Filter history data based on selected model and time frame
   const now = new Date();
-  const cutoff = new Date(now.getTime() - (APP_STATE.timeFrame * 24 * 60 * 60 * 1000));
   
-  console.log(`[app] Filtering history data from ${cutoff.toISOString()} to ${now.toISOString()}`);
+  // Calculate cutoff date based on timeFrame (days before now, including the full current day)
+  // Set cutoff to the start of the day that is 'timeFrame' days ago in UTC
+  const cutoffYear = now.getUTCFullYear();
+  const cutoffMonth = now.getUTCMonth();
+  const cutoffDay = now.getUTCDate() - (APP_STATE.timeFrame - 1);
+  const cutoff = new Date(Date.UTC(cutoffYear, cutoffMonth, cutoffDay, 0, 0, 0, 0));
+  
+  console.log(`[app] Filtering history data from ${cutoff.toISOString()} to ${now.toISOString()} (including current day)`);
+  
+  // Debug: Log a few entries with timestamps to check date parsing
+  if (APP_STATE.history.length > 0) {
+    console.log('[app] DEBUG - Sample entries with dates:');
+    // Get entries from the beginning, middle, and end of the array
+    [0, Math.floor(APP_STATE.history.length / 2), APP_STATE.history.length - 1].forEach(idx => {
+      const entry = APP_STATE.history[idx];
+      if (entry) {
+        const entryDate = new Date(entry.timestamp);
+        console.log(`  Entry ${idx}: key=${entry.key}, timestamp=${entry.timestamp}, parsed=${entryDate.toISOString()}, isValid=${!isNaN(entryDate.getTime())}`);
+        console.log(`  Comparison: ${entryDate.getTime()} >= ${cutoff.getTime()} = ${entryDate >= cutoff}`);
+      }
+    });
+    
+    // Specifically look for September 9th entries
+    const sept9Entries = APP_STATE.history.filter(e => e.timestamp && e.timestamp.includes('2025-09-09'));
+    console.log(`[app] DEBUG - Found ${sept9Entries.length} entries for Sept 9th`);
+    if (sept9Entries.length > 0) {
+      const sampleEntry = sept9Entries[0];
+      const sampleDate = new Date(sampleEntry.timestamp);
+      console.log(`  Sample Sept 9 entry: key=${sampleEntry.key}, timestamp=${sampleEntry.timestamp}`);
+      console.log(`  Parsed date: ${sampleDate.toISOString()}, isValid=${!isNaN(sampleDate.getTime())}`);
+      console.log(`  Comparison: ${sampleDate.getTime()} >= ${cutoff.getTime()} = ${sampleDate >= cutoff}`);
+    }
+  }
   
   let filteredData = APP_STATE.history.filter(entry => {
     try {
       const entryDate = new Date(entry.timestamp);
-      return entryDate >= cutoff;
+      
+      // Include entries that are after or equal to the cutoff date
+      const isIncluded = entryDate >= cutoff;
+      
+      // Debug log for Sept 9 entries that are excluded
+      if (entry.timestamp && entry.timestamp.includes('2025-09-09') && !isIncluded) {
+        console.log(`[app] WARNING: Sept 9 entry excluded: ${entry.key}, ${entry.timestamp}, parsed as ${entryDate.toISOString()}`);
+        console.log(`  Comparison failed: ${entryDate.getTime()} >= ${cutoff.getTime()} = ${isIncluded}`);
+      }
+      
+      return isIncluded;
     } catch (err) {
       console.error('[app] Error parsing entry timestamp:', err, entry);
       return false;
@@ -629,11 +670,16 @@ function renderMetricChart(metric) {
       
       console.log(`[app] Creating metric point for ${entry.key}: timestamp=${entry.timestamp}, parsed=${dateObj.toISOString()}, formatted=${formattedDate}`);
       
+    // Check if the metric value is null or undefined before adding the data point
+    if (entry[metric] !== null && entry[metric] !== undefined) {
       modelData[entry.key].push({
         x: formattedDate, // Use formatted string instead of Date object
         y: entry[metric],
         _date: dateObj // Keep original date for sorting
       });
+    } else {
+      console.log(`[app] Skipping data point for ${entry.key} at ${formattedDate} because ${metric} is ${entry[metric]}`);
+    }
     } catch (err) {
       console.error(`[app] Error parsing date for ${entry.key}:`, err, entry.timestamp);
     }
@@ -730,6 +776,55 @@ function renderMetricChart(metric) {
   if (APP_STATE.metricCharts[metric]) {
     APP_STATE.metricCharts[metric].destroy();
   }
+  
+  // Create a custom plugin to handle date ordering for this metric chart
+  const dateOrderPlugin = {
+    id: 'dateOrder_' + metric,
+    beforeInit: function(chart) {
+      // Get all unique dates across all datasets
+      const allDates = [];
+      chart.data.datasets.forEach(dataset => {
+        dataset.data.forEach(point => {
+          if (point._date && !allDates.some(d => d.getTime() === point._date.getTime())) {
+            allDates.push(point._date);
+          }
+        });
+      });
+      
+      // Sort dates chronologically
+      allDates.sort((a, b) => a - b);
+      
+      // Store the formatted dates as labels for the x-axis
+      chart.dateLabels = allDates.map(date => {
+        return date.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+      });
+      
+      // Create a mapping from date to index
+      const dateIndexMap = new Map();
+      allDates.forEach((date, index) => {
+        dateIndexMap.set(date.getTime(), index);
+      });
+      
+      // Update each dataset to use numeric indices for x values
+      chart.data.datasets.forEach(dataset => {
+        dataset.data.forEach(point => {
+          if (point._date) {
+            point.originalLabel = point.x; // Store original formatted date as label
+            point.x = dateIndexMap.get(point._date.getTime()); // Use index for positioning
+          }
+        });
+      });
+    }
+  };
+  
+  // Register custom plugin
+  Chart.register(dateOrderPlugin);
   
   // Create new chart with simplified options for the grid view
   APP_STATE.metricCharts[metric] = new Chart(ctx, {
@@ -829,7 +924,10 @@ function renderMetricChart(metric) {
       },
       scales: {
         x: {
-          type: 'category',
+          type: 'linear',
+          position: 'bottom',
+          min: -0.5,
+          max: datasets.length > 0 && datasets[0].data.length > 0 ? datasets[0].data.length - 0.5 : 10,
           grid: {
             display: true,
             color: 'rgba(0,0,0,0.2)',
@@ -859,6 +957,13 @@ function renderMetricChart(metric) {
             font: {
               size: 10,
               weight: 'bold'
+            },
+            callback: function(value, index) {
+              // Use the date labels we created in the plugin
+              if (this.chart.dateLabels && index >= 0 && index < this.chart.dateLabels.length) {
+                return this.chart.dateLabels[index];
+              }
+              return '';
             }
           }
         },
@@ -1046,6 +1151,55 @@ function renderHistoryChart() {
     APP_STATE.historyChart.destroy();
   }
   
+  // Create a custom plugin to handle date ordering
+  const dateOrderPlugin = {
+    id: 'dateOrder',
+    beforeInit: function(chart) {
+      // Get all unique dates across all datasets
+      const allDates = [];
+      chart.data.datasets.forEach(dataset => {
+        dataset.data.forEach(point => {
+          if (point._date && !allDates.some(d => d.getTime() === point._date.getTime())) {
+            allDates.push(point._date);
+          }
+        });
+      });
+      
+      // Sort dates chronologically
+      allDates.sort((a, b) => a - b);
+      
+      // Store the formatted dates as labels for the x-axis
+      chart.dateLabels = allDates.map(date => {
+        return date.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+      });
+      
+      // Create a mapping from date to index
+      const dateIndexMap = new Map();
+      allDates.forEach((date, index) => {
+        dateIndexMap.set(date.getTime(), index);
+      });
+      
+      // Update each dataset to use numeric indices for x values
+      chart.data.datasets.forEach(dataset => {
+        dataset.data.forEach(point => {
+          if (point._date) {
+            point.originalLabel = point.x; // Store original formatted date as label
+            point.x = dateIndexMap.get(point._date.getTime()); // Use index for positioning
+          }
+        });
+      });
+    }
+  };
+  
+  // Register custom plugins
+  Chart.register(dateOrderPlugin);
+  
   // Create new chart
   APP_STATE.historyChart = new Chart(ctx, {
     type: 'line',
@@ -1213,7 +1367,10 @@ function renderHistoryChart() {
       },
       scales: {
         x: {
-          type: 'category',
+          type: 'linear',
+          position: 'bottom',
+          min: -0.5,
+          max: datasets.length > 0 && datasets[0].data.length > 0 ? datasets[0].data.length - 0.5 : 10,
           grid: {
             display: true,
             color: 'rgba(0,0,0,0.2)',
@@ -1243,6 +1400,13 @@ function renderHistoryChart() {
             font: {
               size: 11,
               weight: 'bold'
+            },
+            callback: function(value, index) {
+              // Use the date labels we created in the plugin
+              if (this.chart.dateLabels && index >= 0 && index < this.chart.dateLabels.length) {
+                return this.chart.dateLabels[index];
+              }
+              return '';
             }
           }
         },
