@@ -65,6 +65,53 @@ function formatTime(isoUtc) {
   }
 }
 
+// Standard date formatter for chart labels and tooltips
+function formatChartDate(date, includeSeconds = false, includeYear = false, includeWeekday = false) {
+  // Ensure we have a valid date object
+  if (!date || isNaN(date.getTime())) {
+    console.error('[app] Invalid date passed to formatChartDate:', date);
+    return 'Invalid Date';
+  }
+  
+  const options = {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  };
+  
+  if (includeSeconds) {
+    options.second = '2-digit';
+  }
+  
+  if (includeYear) {
+    options.year = 'numeric';
+  }
+  
+  if (includeWeekday) {
+    options.weekday = 'short';
+  }
+  
+  // For 24-hour charts, we want to ensure the time is clearly visible
+  const now = new Date();
+  const isToday = date.getDate() === now.getDate() && 
+                 date.getMonth() === now.getMonth() && 
+                 date.getFullYear() === now.getFullYear();
+  
+  // For today's data, emphasize the time component
+  if (isToday && !includeWeekday) {
+    return date.toLocaleString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: includeSeconds ? '2-digit' : undefined,
+      hour12: false
+    });
+  }
+  
+  return date.toLocaleString('en-US', options);
+}
+
 function compareValues(a, b, isNumeric) {
   if (a === undefined || a === null) return 1;
   if (b === undefined || b === null) return -1;
@@ -366,8 +413,10 @@ function populateModelSelector() {
     // Uncheck the "All Models" checkbox
     allModelsCheckbox.checked = false;
     
-    // Update APP_STATE
-    APP_STATE.selectedModels = sortedModels;
+    // Update APP_STATE with a fresh copy of the models array
+    APP_STATE.selectedModels = [...sortedModels];
+    
+    console.log('[app] Selected all models:', APP_STATE.selectedModels.join(', '));
     
     // Save and update charts
     saveModelSelection();
@@ -466,20 +515,23 @@ function saveModelSelection() {
 }
 
 function updateChartsBasedOnSelection() {
+  console.log('[app] Updating charts based on model selection:', APP_STATE.selectedModels.join(', '));
+  
+  // Always destroy existing charts to ensure clean state
+  destroyAllCharts();
+  
+  if (APP_STATE.viewMode === 'table') {
+    // If in table view, no need to render charts
+    return;
+  }
+  
   if (APP_STATE.selectedMetric === 'all') {
     // For all metrics view, re-render all charts
-    destroyAllCharts();
     renderAllMetricCharts();
   } else {
     // For single chart view
     const chartContainer = document.getElementById('single-chart-view');
     if (chartContainer) {
-      // Destroy existing chart if any
-      if (APP_STATE.historyChart) {
-        APP_STATE.historyChart.destroy();
-        APP_STATE.historyChart = null;
-      }
-      
       // Create fresh canvas
       chartContainer.innerHTML = '<canvas id="history-chart"></canvas>';
       
@@ -495,12 +547,21 @@ function getHistoryData() {
   // Filter history data based on selected model and time frame
   const now = new Date();
   
-  // Calculate cutoff date based on timeFrame (days before now, including the full current day)
-  // Set cutoff to the start of the day that is 'timeFrame' days ago in UTC
-  const cutoffYear = now.getUTCFullYear();
-  const cutoffMonth = now.getUTCMonth();
-  const cutoffDay = now.getUTCDate() - (APP_STATE.timeFrame - 1);
-  const cutoff = new Date(Date.UTC(cutoffYear, cutoffMonth, cutoffDay, 0, 0, 0, 0));
+  // Calculate cutoff date based on timeFrame
+  let cutoff;
+  
+  if (APP_STATE.timeFrame === 1) {
+    // For "last 24 hours", use a rolling 24-hour window instead of calendar day
+    cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    console.log(`[app] Using rolling 24-hour window: ${cutoff.toISOString()} to ${now.toISOString()}`);
+  } else {
+    // For other timeframes, use calendar days as before
+    const cutoffYear = now.getUTCFullYear();
+    const cutoffMonth = now.getUTCMonth();
+    const cutoffDay = now.getUTCDate() - (APP_STATE.timeFrame - 1);
+    cutoff = new Date(Date.UTC(cutoffYear, cutoffMonth, cutoffDay, 0, 0, 0, 0));
+    console.log(`[app] Using calendar days window: ${cutoff.toISOString()} to ${now.toISOString()} (${APP_STATE.timeFrame} days)`);
+  }
   
   console.log(`[app] Filtering history data from ${cutoff.toISOString()} to ${now.toISOString()} (including current day)`);
   
@@ -553,7 +614,11 @@ function getHistoryData() {
   
   // Check if we need to filter by models
   if (!(APP_STATE.selectedModels.length === 1 && APP_STATE.selectedModels[0] === 'all')) {
-    filteredData = filteredData.filter(entry => APP_STATE.selectedModels.includes(entry.key));
+    // Create a fresh set of selected models for efficient lookup
+    const selectedModelsSet = new Set(APP_STATE.selectedModels);
+    
+    // Filter data to only include selected models
+    filteredData = filteredData.filter(entry => selectedModelsSet.has(entry.key));
     console.log(`[app] Filtered to ${filteredData.length} entries for selected models: ${APP_STATE.selectedModels.join(', ')}`);
   }
   
@@ -794,29 +859,83 @@ function renderMetricChart(metric) {
       // Sort dates chronologically
       allDates.sort((a, b) => a - b);
       
-      // Store the formatted dates as labels for the x-axis
-      chart.dateLabels = allDates.map(date => {
-        return date.toLocaleString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        });
-      });
+      // Ensure we have a reasonable number of tick marks based on the date range
+      const dateRange = allDates.length > 1 ? 
+        (allDates[allDates.length - 1] - allDates[0]) / (1000 * 60 * 60) : 24; // in hours
       
+      // Get the timeframe to customize tick behavior
+      const metricChartTimeFrame = APP_STATE.timeFrame;
+      console.log(`[app] Metric chart ${metric} setup for timeframe: ${metricChartTimeFrame} days, date range: ${dateRange.toFixed(1)} hours`);
+      
+      // Determine appropriate tick density based on date range
+      let tickInterval;
+      
+      // Calculate desired number of ticks based on data points
+      const totalPoints = allDates.length;
+      
+      if (metricChartTimeFrame === 1 || dateRange <= 24) {
+        // For 24 hours or less, show hourly ticks if possible
+        if (totalPoints <= 24) {
+          // If we have 24 or fewer points, show all of them
+          tickInterval = 1;
+        } else {
+          // Otherwise, aim for about 12-24 ticks (every 1-2 hours)
+          tickInterval = Math.max(1, Math.round(totalPoints / 24));
+        }
+        console.log(`[app] 24-hour chart: Using tick interval of ${tickInterval} (${totalPoints} total points)`);
+      } else if (dateRange <= 72) {
+        // For 3 days or less, aim for 12-18 ticks
+        tickInterval = Math.max(1, Math.round(totalPoints / 18));
+      } else if (dateRange <= 168) { // 1 week
+        // For a week, aim for 7-14 ticks (daily or twice daily)
+        tickInterval = Math.max(1, Math.round(totalPoints / 14));
+      } else {
+        // For longer periods, adjust tick density based on total points
+        // More points should result in more ticks, but not too many
+        const baseTicks = 10; // Minimum number of ticks
+        const maxTicks = Math.min(30, Math.ceil(totalPoints / 5)); // Cap at 30 ticks or 1 per 5 points
+        tickInterval = Math.max(1, Math.round(totalPoints / maxTicks));
+      }
+      
+      console.log(`[app] Metric chart ${metric} date range: ${dateRange.toFixed(1)} hours, ${allDates.length} points, tick interval: ${tickInterval}`);
+      
+      // Store the actual dates for the x-axis ticks
+      chart.allDates = allDates;
+      
+      // Store tick interval for use in the ticks callback
+      chart.tickInterval = tickInterval;
+      
+      // Store all dates for reference
+      chart.allDates = allDates;
+      
+      // Ensure x-axis covers all computed date indices
+      if (chart.options && chart.options.scales && chart.options.scales.x) {
+        chart.options.scales.x.max = Math.max(0, allDates.length - 0.5);
+      }
+      
+      // SIMPLIFIED APPROACH: Use direct indices without offsets
       // Create a mapping from date to index
       const dateIndexMap = new Map();
       allDates.forEach((date, index) => {
         dateIndexMap.set(date.getTime(), index);
       });
       
+      // Log the timeframe for debugging
+      const metricLogTimeFrame = APP_STATE.timeFrame;
+      console.log(`[app] Metric chart ${metric} setup for timeframe: ${metricLogTimeFrame} days`);
+      
       // Update each dataset to use numeric indices for x values
       chart.data.datasets.forEach(dataset => {
         dataset.data.forEach(point => {
           if (point._date) {
             point.originalLabel = point.x; // Store original formatted date as label
-            point.x = dateIndexMap.get(point._date.getTime()); // Use index for positioning
+            const index = dateIndexMap.get(point._date.getTime());
+            point.x = index; // Use direct index without offset
+            
+            // Log a few sample points for debugging
+            if (dataset === chart.data.datasets[0] && (index === 0 || index === allDates.length - 1)) {
+              console.log(`[app] Metric chart ${metric} sample point: date=${point._date.toISOString()}, index=${index}, x=${point.x}`);
+            }
           }
         });
       });
@@ -863,18 +982,17 @@ function renderMetricChart(metric) {
                   // Get the original timestamp from the data point
                   const dataPoint = context[0].raw;
                   if (dataPoint && dataPoint._date) {
-                    // Format the date properly
-                    return dataPoint._date.toLocaleString('en-US', {
-                      weekday: 'short',
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                      hour12: false
-                    });
+                    // Format the date using our standard formatter - include seconds, year, and weekday for tooltip
+                    return formatChartDate(dataPoint._date, true, true, true);
                   }
+                  
+                  // If _date is not available but we have an index and allDates
+                  const index = context[0].parsed.x;
+                  if (typeof index === 'number' && this.chart && this.chart.allDates && 
+                      index >= 0 && index < this.chart.allDates.length) {
+                    return formatChartDate(this.chart.allDates[index], true, true, true);
+                  }
+                  
                   // Fallback to label if _date is not available
                   return context[0].label || '';
                 }
@@ -926,12 +1044,20 @@ function renderMetricChart(metric) {
         x: {
           type: 'linear',
           position: 'bottom',
+          // Use linear scale with precise alignment
           min: -0.5,
-          max: datasets.length > 0 && datasets[0].data.length > 0 ? datasets[0].data.length - 0.5 : 10,
+          max: datasets.length > 0 && datasets[0].data.length > 0 ? 
+               datasets[0].data.length - 0.5 : 10,
+          alignToPixels: true,
+          offset: false, // Ensure data points align with ticks
           grid: {
             display: true,
             color: 'rgba(0,0,0,0.2)',
-            lineWidth: 1
+            lineWidth: 1,
+            offset: false, // Ensure grid lines align with data points
+            drawOnChartArea: true,
+            drawTicks: true,
+            tickLength: 10
           },
           border: {
             display: true,
@@ -948,7 +1074,7 @@ function renderMetricChart(metric) {
             }
           },
           ticks: {
-            autoSkip: true,
+            autoSkip: false, // We'll handle our own skipping
             maxRotation: 90,
             minRotation: 45,
             display: true,
@@ -958,10 +1084,31 @@ function renderMetricChart(metric) {
               size: 10,
               weight: 'bold'
             },
-            callback: function(value, index) {
-              // Use the date labels we created in the plugin
-              if (this.chart.dateLabels && index >= 0 && index < this.chart.dateLabels.length) {
-                return this.chart.dateLabels[index];
+            stepSize: 1,
+            precision: 0,
+            align: 'center', // Center the tick with the data point
+            crossAlign: 'center', // Center cross alignment
+            callback: function(value) {
+              // Use the tick value (numeric x index) to map to dates
+              const idx = Math.round(value);
+              if (this.chart.allDates && idx >= 0 && idx < this.chart.allDates.length) {
+                const currentTimeFrame = APP_STATE.timeFrame;
+                const date = this.chart.allDates[idx];
+                
+                // Always show first and last tick
+                if (idx === 0 || idx === this.chart.allDates.length - 1) {
+                  return formatChartDate(date, false, true); // Include year for better context
+                }
+                // For 24-hour charts, show more ticks with time focus
+                else if (currentTimeFrame === 1) {
+                  if (idx % (this.chart.tickInterval || 1) === 0) {
+                    return formatChartDate(date);
+                  }
+                }
+                // Show intermediate ticks at calculated intervals
+                else if (idx % (this.chart.tickInterval || 1) === 0) {
+                  return formatChartDate(date);
+                }
               }
               return '';
             }
@@ -1151,62 +1298,122 @@ function renderHistoryChart() {
     APP_STATE.historyChart.destroy();
   }
   
-  // Create a custom plugin to handle date ordering
-  const dateOrderPlugin = {
-    id: 'dateOrder',
-    beforeInit: function(chart) {
-      // Get all unique dates across all datasets
-      const allDates = [];
-      chart.data.datasets.forEach(dataset => {
-        dataset.data.forEach(point => {
-          if (point._date && !allDates.some(d => d.getTime() === point._date.getTime())) {
-            allDates.push(point._date);
+      // Create a custom plugin to handle date ordering and dynamic data updates
+      const dateOrderPlugin = {
+        id: 'dateOrder',
+        beforeInit: function(chart) {
+          // Get all unique dates across all datasets
+          const allDates = [];
+          chart.data.datasets.forEach(dataset => {
+            dataset.data.forEach(point => {
+              if (point._date && !allDates.some(d => d.getTime() === point._date.getTime())) {
+                allDates.push(point._date);
+              }
+            });
+          });
+          
+          // Sort dates chronologically
+          allDates.sort((a, b) => a - b);
+          
+          // Ensure we have a reasonable number of tick marks based on the date range
+          const dateRange = allDates.length > 1 ? 
+            (allDates[allDates.length - 1] - allDates[0]) / (1000 * 60 * 60) : 24; // in hours
+          
+          // Get the timeframe to customize tick behavior
+          const mainChartTimeFrame = APP_STATE.timeFrame;
+          console.log(`[app] Chart setup for timeframe: ${mainChartTimeFrame} days, date range: ${dateRange.toFixed(1)} hours`);
+          
+          // Determine appropriate tick density based on date range
+          let tickInterval;
+          
+          // Calculate desired number of ticks based on data points
+          const totalPoints = allDates.length;
+          
+          if (mainChartTimeFrame === 1 || dateRange <= 24) {
+            // For 24 hours or less, show hourly ticks if possible
+            if (totalPoints <= 24) {
+              // If we have 24 or fewer points, show all of them
+              tickInterval = 1;
+            } else {
+              // Otherwise, aim for about 12-24 ticks (every 1-2 hours)
+              tickInterval = Math.max(1, Math.round(totalPoints / 24));
+            }
+            console.log(`[app] 24-hour chart: Using tick interval of ${tickInterval} (${totalPoints} total points)`);
+          } else if (dateRange <= 72) {
+            // For 3 days or less, aim for 12-18 ticks
+            tickInterval = Math.max(1, Math.round(totalPoints / 18));
+          } else if (dateRange <= 168) { // 1 week
+            // For a week, aim for 7-14 ticks (daily or twice daily)
+            tickInterval = Math.max(1, Math.round(totalPoints / 14));
+          } else {
+            // For longer periods, adjust tick density based on total points
+            // More points should result in more ticks, but not too many
+            const baseTicks = 10; // Minimum number of ticks
+            const maxTicks = Math.min(30, Math.ceil(totalPoints / 5)); // Cap at 30 ticks or 1 per 5 points
+            tickInterval = Math.max(1, Math.round(totalPoints / maxTicks));
           }
-        });
-      });
+          
+          console.log(`[app] Chart date range: ${dateRange.toFixed(1)} hours, ${allDates.length} points, tick interval: ${tickInterval}`);
+          
+      // Store tick interval for use in the ticks callback
+      chart.tickInterval = tickInterval;
       
-      // Sort dates chronologically
-      allDates.sort((a, b) => a - b);
-      
-      // Store the formatted dates as labels for the x-axis
-      chart.dateLabels = allDates.map(date => {
-        return date.toLocaleString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        });
-      });
-      
-      // Create a mapping from date to index
-      const dateIndexMap = new Map();
-      allDates.forEach((date, index) => {
-        dateIndexMap.set(date.getTime(), index);
-      });
-      
-      // Update each dataset to use numeric indices for x values
-      chart.data.datasets.forEach(dataset => {
-        dataset.data.forEach(point => {
-          if (point._date) {
-            point.originalLabel = point.x; // Store original formatted date as label
-            point.x = dateIndexMap.get(point._date.getTime()); // Use index for positioning
-          }
-        });
-      });
-    }
-  };
+      // Store all dates for reference
+      chart.allDates = allDates;
+          
+          // Create a mapping from date to index
+          const dateIndexMap = new Map();
+          allDates.forEach((date, index) => {
+            dateIndexMap.set(date.getTime(), index);
+          });
+          
+          // Log the timeframe for debugging
+          const dateLabelsTimeFrame = APP_STATE.timeFrame;
+          console.log(`[app] Chart setup for timeframe: ${dateLabelsTimeFrame} days with ${allDates.length} points`);
+          
+          // Update each dataset to use numeric indices for x values
+          chart.data.datasets.forEach(dataset => {
+            dataset.data.forEach(point => {
+              if (point._date) {
+                const index = dateIndexMap.get(point._date.getTime());
+                // Use index directly for x value
+                point.x = index;
+                
+                // Log a few sample points for debugging
+                if (dataset === chart.data.datasets[0] && (index === 0 || index === allDates.length - 1)) {
+                  console.log(`[app] Sample point: date=${point._date.toISOString()}, index=${index}, x=${point.x}`);
+                }
+              }
+            });
+          });
+        }
+      };
   
   // Register custom plugins
   Chart.register(dateOrderPlugin);
   
-  // Create new chart
+  // Create new chart with dynamic plotting capabilities
   APP_STATE.historyChart = new Chart(ctx, {
     type: 'line',
     data: {
       datasets
     },
     options: {
+      animation: {
+        duration: 750, // Animation duration when data changes
+        easing: 'easeOutQuart' // Smooth easing function
+      },
+      transitions: {
+        active: {
+          animation: {
+            duration: 400 // Faster transitions when interacting
+          }
+        }
+      },
+      // Enable dynamic updating
+      parsing: false, // Disable parsing for better performance with large datasets
+      normalized: true, // Normalize data for better animations
+      resizeDelay: 100, // Small delay for smoother resize handling
       responsive: true,
       maintainAspectRatio: false,
       interaction: {
@@ -1281,19 +1488,18 @@ function renderHistoryChart() {
                   // Get the original timestamp from the data point
                   const dataPoint = context[0].raw;
                   if (dataPoint && dataPoint._date) {
-                    // Format the date properly
-                    return dataPoint._date.toLocaleString('en-US', {
-                      weekday: 'short',
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                      hour12: false
-                    });
+                    // Format the date using our standard formatter - include seconds, year, and weekday for tooltip
+                    return formatChartDate(dataPoint._date, true, true, true);
                   }
-                  // Fallback to label if _date is not available
+                  
+                  // If _date is not available but we have an index and allDates
+                  const index = context[0].parsed.x;
+                  if (typeof index === 'number' && this.chart && this.chart.allDates && 
+                      index >= 0 && index < this.chart.allDates.length) {
+                    return formatChartDate(this.chart.allDates[index], true, true, true);
+                  }
+                  
+                  // Final fallback to label
                   return context[0].label || '';
                 }
                 return '';
@@ -1369,12 +1575,20 @@ function renderHistoryChart() {
         x: {
           type: 'linear',
           position: 'bottom',
+          // Use linear scale with precise alignment
           min: -0.5,
-          max: datasets.length > 0 && datasets[0].data.length > 0 ? datasets[0].data.length - 0.5 : 10,
+          max: datasets.length > 0 && datasets[0].data.length > 0 ? 
+               datasets[0].data.length - 0.5 : 10,
+          alignToPixels: true,
+          offset: false, // Ensure data points align with ticks
           grid: {
             display: true,
             color: 'rgba(0,0,0,0.2)',
-            lineWidth: 1
+            lineWidth: 1,
+            offset: false, // Ensure grid lines align with data points
+            drawOnChartArea: true,
+            drawTicks: true,
+            tickLength: 10
           },
           border: {
             display: true,
@@ -1391,7 +1605,7 @@ function renderHistoryChart() {
             }
           },
           ticks: {
-            autoSkip: true,
+            autoSkip: false, // We'll handle our own skipping
             maxRotation: 90,
             minRotation: 45,
             display: true,
@@ -1401,10 +1615,31 @@ function renderHistoryChart() {
               size: 11,
               weight: 'bold'
             },
-            callback: function(value, index) {
-              // Use the date labels we created in the plugin
-              if (this.chart.dateLabels && index >= 0 && index < this.chart.dateLabels.length) {
-                return this.chart.dateLabels[index];
+            stepSize: 1,
+            precision: 0,
+            align: 'center', // Center the tick with the data point
+            crossAlign: 'center', // Center cross alignment
+            callback: function(value) {
+              // Use the tick value (numeric x index) to map to dates
+              const idx = Math.round(value);
+              if (this.chart.allDates && idx >= 0 && idx < this.chart.allDates.length) {
+                const currentTimeFrame = APP_STATE.timeFrame;
+                const date = this.chart.allDates[idx];
+                
+                // Always show first and last tick
+                if (idx === 0 || idx === this.chart.allDates.length - 1) {
+                  return formatChartDate(date, false, true); // Include year for better context
+                }
+                // For 24-hour charts, show more ticks with time focus
+                else if (currentTimeFrame === 1) {
+                  if (idx % (this.chart.tickInterval || 1) === 0) {
+                    return formatChartDate(date);
+                  }
+                }
+                // Show intermediate ticks at calculated intervals
+                else if (idx % (this.chart.tickInterval || 1) === 0) {
+                  return formatChartDate(date);
+                }
               }
               return '';
             }
@@ -1427,6 +1662,39 @@ function attachHistoryControlHandlers() {
   const modelSelector = document.getElementById('model-selector');
   const timeFrameSelector = document.getElementById('time-frame');
   const metricSelector = document.getElementById('metric-selector');
+  
+  // Add refresh button to history controls if it doesn't exist
+  const historyControls = document.getElementById('history-controls');
+  if (historyControls && !document.getElementById('refresh-data')) {
+    const refreshButton = document.createElement('button');
+    refreshButton.id = 'refresh-data';
+    refreshButton.className = 'control-button';
+    refreshButton.innerHTML = '<span>↻</span> Refresh';
+    refreshButton.title = 'Refresh data';
+    historyControls.appendChild(refreshButton);
+    
+    // Add some basic styles
+    const style = document.createElement('style');
+    style.textContent = `
+      #refresh-data {
+        margin-left: 10px;
+        padding: 5px 10px;
+        background-color: #f0f0f0;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #refresh-data:hover {
+        background-color: #e0e0e0;
+      }
+      #refresh-data span {
+        display: inline-block;
+        font-size: 14px;
+        margin-right: 4px;
+      }
+    `;
+    document.head.appendChild(style);
+  }
   
   viewModeSelector.addEventListener('change', () => {
     APP_STATE.viewMode = viewModeSelector.value;
@@ -1468,31 +1736,11 @@ function attachHistoryControlHandlers() {
         // Create fresh canvas
         chartContainer.innerHTML = '<canvas id="history-chart"></canvas>';
         
-        // Small delay to ensure DOM is updated
+        // Render the chart with a small delay to ensure DOM is updated
         setTimeout(() => {
           renderHistoryChart();
         }, 50);
       }
-    }
-  });
-  
-  timeFrameSelector.addEventListener('change', () => {
-    APP_STATE.timeFrame = parseInt(timeFrameSelector.value, 10);
-    
-    // Save preference to localStorage
-    try {
-      localStorage.setItem('apispeedtest-time-frame', String(APP_STATE.timeFrame));
-    } catch (err) {
-      console.error('[app] Error saving time frame to localStorage:', err);
-    }
-    
-    if (APP_STATE.selectedMetric === 'all') {
-      // For all metrics view, re-render all charts
-      destroyAllCharts();
-      renderAllMetricCharts();
-    } else {
-      // For single chart view
-      renderHistoryChart();
     }
   });
   
@@ -1545,6 +1793,59 @@ function attachHistoryControlHandlers() {
       }, 50);
     }
   });
+}
+
+// Function to handle dynamic data updates
+function setupDynamicDataUpdates() {
+  console.log('[app] Setting up dynamic data updates');
+  
+  // Create a function to periodically check for new data
+  const checkForNewData = async () => {
+    try {
+      // Only fetch new data if we're in history view mode
+      if (APP_STATE.viewMode !== 'table') {
+        console.log('[app] Checking for new data...');
+        
+        // Fetch the latest history data
+        const newHistory = await fetchJson('data/history.json').catch(() => []);
+        
+        // Check if we have new data points
+        if (Array.isArray(newHistory) && newHistory.length > APP_STATE.history.length) {
+          console.log(`[app] New data detected! Old: ${APP_STATE.history.length}, New: ${newHistory.length}`);
+          
+          // Update the history data
+          APP_STATE.history = newHistory;
+          
+          // Update the charts
+          if (APP_STATE.selectedMetric === 'all') {
+            // For all metrics view, re-render all charts
+            destroyAllCharts();
+            renderAllMetricCharts();
+          } else {
+            // For single chart view
+            renderHistoryChart();
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[app] Error checking for new data:', err);
+    }
+  };
+  
+  // Check for new data every 60 seconds
+  const updateInterval = setInterval(checkForNewData, 60000);
+  
+  // Store the interval ID so we can clear it later if needed
+  APP_STATE.dataUpdateInterval = updateInterval;
+  
+  // Also add a manual refresh button
+  const refreshButton = document.getElementById('refresh-data');
+  if (refreshButton) {
+    refreshButton.addEventListener('click', async () => {
+      console.log('[app] Manual data refresh requested');
+      await checkForNewData();
+    });
+  }
 }
 
 async function init() {
@@ -1619,6 +1920,9 @@ async function init() {
   
   // Toggle view to apply settings
   toggleView();
+  
+  // Setup dynamic data updates
+  setupDynamicDataUpdates();
     
     if (APP_STATE.meta && APP_STATE.meta.generated_at) {
       document.getElementById('updated-time').textContent = formatTime(APP_STATE.meta.generated_at);
