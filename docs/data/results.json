@@ -1,1 +1,35 @@
-[]
+[
+  {
+    "key": "anthropic:claude-3-7-sonnet-latest",
+    "provider": "anthropic",
+    "model": "claude-3-7-sonnet-latest",
+    "nonstreaming_avg_s": 3.233156736000012,
+    "nonstreaming_runs": [
+      {
+        "duration_seconds": 3.233156736000012,
+        "prompt_tokens": 32,
+        "completion_tokens": 123,
+        "total_tokens": 155
+      }
+    ],
+    "streaming_ttfb_avg_s": 0.5079586359999553,
+    "streaming_total_avg_s": 2.741881116000002,
+    "streaming_runs": [
+      {
+        "time_to_first_token_seconds": 0.5079586359999553,
+        "total_time_seconds": 2.741881116000002,
+        "num_chunks": 46,
+        "characters_streamed": 420,
+        "prompt_tokens": 32,
+        "completion_tokens": 111,
+        "total_tokens": 143
+      }
+    ],
+    "total_prompt_tokens": 64,
+    "total_completion_tokens": 234,
+    "total_tokens": 298,
+    "nonstream_tokens_per_second": 38.04331495298084,
+    "stream_tokens_per_second": 40.48315565261726,
+    "updated_at": "2025-10-13T16:19:25.204766+00:00"
+  }
+]
