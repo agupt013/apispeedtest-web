@@ -3,33 +3,33 @@
     "key": "anthropic:claude-3-7-sonnet-latest",
     "provider": "anthropic",
     "model": "claude-3-7-sonnet-latest",
-    "nonstreaming_avg_s": 3.3513103860000086,
+    "nonstreaming_avg_s": 4.710225931000011,
     "nonstreaming_runs": [
       {
-        "duration_seconds": 3.3513103860000086,
+        "duration_seconds": 4.710225931000011,
+        "prompt_tokens": 32,
+        "completion_tokens": 117,
+        "total_tokens": 149
+      }
+    ],
+    "streaming_ttfb_avg_s": 4.343827701999999,
+    "streaming_total_avg_s": 6.474080395000001,
+    "streaming_runs": [
+      {
+        "time_to_first_token_seconds": 4.343827701999999,
+        "total_time_seconds": 6.474080395000001,
+        "num_chunks": 45,
+        "characters_streamed": 401,
         "prompt_tokens": 32,
         "completion_tokens": 108,
         "total_tokens": 140
       }
     ],
-    "streaming_ttfb_avg_s": 2.447956640000001,
-    "streaming_total_avg_s": 4.66401628700001,
-    "streaming_runs": [
-      {
-        "time_to_first_token_seconds": 2.447956640000001,
-        "total_time_seconds": 4.66401628700001,
-        "num_chunks": 47,
-        "characters_streamed": 420,
-        "prompt_tokens": 32,
-        "completion_tokens": 111,
-        "total_tokens": 143
-      }
-    ],
     "total_prompt_tokens": 64,
-    "total_completion_tokens": 219,
-    "total_tokens": 283,
-    "nonstream_tokens_per_second": 32.22620036961259,
-    "stream_tokens_per_second": 23.799230785147508,
-    "updated_at": "2025-11-11T04:20:33.783198+00:00"
+    "total_completion_tokens": 225,
+    "total_tokens": 289,
+    "nonstream_tokens_per_second": 24.839572817510298,
+    "stream_tokens_per_second": 16.681905909511027,
+    "updated_at": "2025-11-11T08:21:10.994414+00:00"
   }
 ]
