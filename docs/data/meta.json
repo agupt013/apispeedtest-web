@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-03T08:50:22.135548+00:00",
+  "generated_at": "2026-06-03T16:28:52.572351+00:00",
   "runs": 1,
   "mode": "both",
   "models": [
@@ -23,5 +23,5 @@
     "llama:llama3-70b-8192"
   ],
   "request_timeout_seconds": 60.0,
-  "error_message": "Benchmark failures encountered. Last error: BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cbg3NcacC55k4zRzBrXyM'}"
+  "error_message": "Benchmark failures encountered. Last error: RateLimitError: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}"
 }
