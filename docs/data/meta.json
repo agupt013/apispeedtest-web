@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-25T09:41:18.507912+00:00",
+  "generated_at": "2026-07-25T13:13:59.163842+00:00",
   "runs": 1,
   "mode": "both",
   "models": [
@@ -23,5 +23,5 @@
     "llama:llama3-70b-8192"
   ],
   "request_timeout_seconds": 60.0,
-  "error_message": "Benchmark failures encountered. Last error: InternalServerError: Error code: 500 - {'error': {'message': 'The server had an error processing your request. Sorry about that! You can retry your request, or contact us through our help center at help.openai.com if you keep seeing this error. (Please include the request ID req_cb8c97cdeb3d4120ac551a5c4f673524 in your email.)', 'type': 'server_error', 'param': None, 'code': None}}"
+  "error_message": "Benchmark failures encountered. Last error: RateLimitError: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}"
 }
