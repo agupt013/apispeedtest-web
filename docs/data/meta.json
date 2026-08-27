@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-26T22:40:06.320903+00:00",
+  "generated_at": "2026-08-27T06:53:31.124432+00:00",
   "runs": 1,
   "mode": "both",
   "models": [
@@ -23,5 +23,5 @@
     "llama:llama3-70b-8192"
   ],
   "request_timeout_seconds": 60.0,
-  "error_message": "Benchmark failures encountered. Last error: OpenAIRateLimitError: Error code: 429 - {'error': {'message': 'You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.', 'type': 'insufficient_quota', 'param': None, 'code': 'credit_balance_exhausted'}}"
+  "error_message": "Benchmark failures encountered. Last error: OpenAIAuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************W2wA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'code': 'invalid_api_key', 'param': None}, 'status': 401}"
 }
